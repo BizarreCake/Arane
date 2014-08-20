@@ -98,11 +98,13 @@ namespace p6 {
   
   garbage_collector::~garbage_collector ()
   {
+    /*
     std::cout << "total_ext_bytes: " << this->total_ext_bytes << std::endl;
     std::cout << "avg increase: " << (this->total_ext_bytes / this->inc_count) << std::endl;
     std::cout << "page count: " << this->page_count << std::endl;
     std::cout << "total page count: " << this->total_page_count << std::endl;
     std::cout << "total alloc count: " << this->total_alloc_count << std::endl;
+    */
     auto page = this->pages;
     while (page)
       {
