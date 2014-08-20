@@ -49,6 +49,9 @@ namespace p6 {
     
     garbage_collector gc;
     
+  public:
+    inline garbage_collector& get_gc () { return this->gc; }
+    
   private:
     /* 
      * Builtin functions:

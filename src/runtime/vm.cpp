@@ -24,6 +24,10 @@
 
 #include <iomanip> // DEBUG
 
+// DEBUG
+#include <thread>
+#include <chrono>
+
 
 namespace p6 {
   
@@ -192,7 +196,7 @@ namespace p6 {
       count = 0;
     int cap = count ? count : 1;
     
-    p_value *data = new p_value;
+    p_value *data = this->gc.alloc (true);
     data->type = PERL_ARRAY;
     data->val.arr.len = count;
     data->val.arr.cap = cap;
@@ -207,7 +211,7 @@ namespace p6 {
     p_value& val = stack[sp++];
     val.type = PERL_REF;
     val.val.ref = data;
-    this->gc.register_object (data);
+    p_value_unprotect (data);
   }
   
   void
@@ -266,7 +270,7 @@ namespace p6 {
       len = str_len - off;
     
     
-    p_value *data = new p_value;
+    p_value *data = this->gc.alloc (true);
     data->type = PERL_DSTR;
     data->val.str.data = new char [len + 1];
     data->val.str.len = len;
@@ -288,7 +292,7 @@ namespace p6 {
     res.val.ref = data;
     
     stack[sp++] = res;
-    gc.register_object (data);
+    p_value_unprotect (data);
   }
   
   void
@@ -353,13 +357,15 @@ namespace p6 {
   
 //------------------------------------------------------------------------------
   
-  static void
-  _gc_register (p_value& val, garbage_collector& gc)
+  static inline void
+  _unprotect_external (p_value& val)
   {
     if (val.type == PERL_REF)
-      gc.register_object (val.val.ref);
+      {
+        if (val.val.ref)
+          p_value_unprotect (val.val.ref);
+      }
   }
-  
   
   /* 
    * Executes the specified executable.
@@ -488,38 +494,43 @@ namespace p6 {
           // add
           case 0x10: 
             -- sp;
-            stack[sp - 1] = p_value_add (stack[sp - 1], stack[sp]);
+            stack[sp - 1] = p_value_add (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // sub
           case 0x11:
             -- sp;
-            stack[sp - 1] = p_value_sub (stack[sp - 1], stack[sp]);
+            stack[sp - 1] = p_value_sub (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // mul
           case 0x12:
             -- sp;
-            stack[sp - 1] = p_value_mul (stack[sp - 1], stack[sp]);
+            stack[sp - 1] = p_value_mul (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // div
           case 0x13:
             -- sp;
-            stack[sp - 1] = p_value_div (stack[sp - 1], stack[sp]);
+            stack[sp - 1] = p_value_div (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // div
           case 0x14:
             -- sp;
-            stack[sp - 1] = p_value_mod (stack[sp - 1], stack[sp]);
+            stack[sp - 1] = p_value_mod (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // concat - concatenate two values together into a string.
           case 0x15:
             -- sp;
-            stack[sp - 1] = p_value_concat (stack[sp - 1], stack[sp]);
-            _gc_register (stack[sp - 1], this->gc);
+            stack[sp - 1] = p_value_concat (stack[sp - 1], stack[sp], *this);
+            _unprotect_external (stack[sp - 1]);
             break;
           
           // is_false
@@ -545,6 +556,7 @@ namespace p6 {
             if (stack[sp - 1].type != PERL_REF)
               throw std::runtime_error ("cannot take reference of non-reference data type");
             stack[sp - 1].val.ref = &stack[sp - 1];
+            stack[sp - 1].val.ref->is_gc = false;
             stack[sp - 1].type = PERL_REF;
             break;
           
@@ -562,12 +574,11 @@ namespace p6 {
           // box
           case 0x1B:
             {
-              p_value *nv = new p_value;
-              *nv = stack[sp - 1];
+              p_value *nv = this->gc.alloc_copy (stack[sp - 1], true);
               
               stack[sp - 1].type = PERL_REF;
               stack[sp - 1].val.ref = nv;
-              _gc_register (stack[sp - 1], this->gc);
+              p_value_unprotect (nv);
             }
             break;
           
@@ -647,7 +658,7 @@ namespace p6 {
               
               unsigned int cap = count ? count : 1;
               
-              p_value *data = new p_value;
+              p_value *data = this->gc.alloc (true);
               data->type = PERL_ARRAY;
               data->val.arr.len = count;
               data->val.arr.cap = cap;
@@ -661,7 +672,9 @@ namespace p6 {
               p_value& val = stack[sp++];
               val.type = PERL_REF;
               val.val.ref = data;
-              this->gc.register_object (data);
+              p_value_unprotect (data);
+              
+              this->gc.notify_increase (cap * sizeof (p_value));
             }
             break;
           
@@ -694,6 +707,7 @@ namespace p6 {
                           for (unsigned int i = data.len; i <= index; ++i)
                             narr[i].type = PERL_UNDEF;
                           
+                          this->gc.notify_increase ((ncap - data.cap) * sizeof (p_value));
                           data.cap = ncap;
                           delete[] data.data;
                           data.data = narr;
@@ -769,7 +783,7 @@ namespace p6 {
               
               unsigned int cap = tcount ? tcount : 1;
               
-              p_value *data = new p_value;
+              p_value *data = this->gc.alloc (true);
               data->type = PERL_ARRAY;
               data->val.arr.len = tcount;
               data->val.arr.cap = cap;
@@ -795,7 +809,8 @@ namespace p6 {
               p_value& val = stack[sp++];
               val.type = PERL_REF;
               val.val.ref = data;
-              this->gc.register_object (data);
+              p_value_unprotect (data);
+              this->gc.notify_increase (cap * sizeof (p_value));
             }
             break;
           
@@ -811,13 +826,14 @@ namespace p6 {
           if (stack[sp - 1].type == PERL_CSTR ||
               (stack[sp - 1].type == PERL_REF && stack[sp - 1].val.ref && stack[sp - 1].val.ref->type == PERL_DSTR))
             break;
-          stack[sp - 1] = p_value_to_str (stack[sp - 1]);
-          _gc_register (stack[sp - 1], this->gc);
+          stack[sp - 1] = p_value_to_str (stack[sp - 1], *this);
+          _unprotect_external (stack[sp - 1]);
           break;
         
         // to_int
         case 0x41:
-          stack[sp - 1] = p_value_to_int (stack[sp - 1]);
+          stack[sp - 1] = p_value_to_int (stack[sp - 1], *this);
+          _unprotect_external (stack[sp - 1]);
           break;
         
 //------------------------------------------------------------------------------
@@ -906,7 +922,6 @@ namespace p6 {
           case 0x66:
             {
               unsigned int index = bp + 1 + *ptr++;
-              
               stack[index] = stack[sp - 1];
             }
             break;
@@ -1053,6 +1068,7 @@ namespace p6 {
       }
   
   done: ;
+    //this->gc.collect ();
   }
 }
 

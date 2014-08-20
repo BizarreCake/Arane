@@ -120,8 +120,74 @@ namespace p6 {
   
   
   void
+  compiler::compile_for_on_range (ast_for *ast)
+  {
+    // the loop variable is also the index variable.
+    
+    ast_range *ran = static_cast<ast_range *> (ast->get_arg ());
+    
+    int lbl_done = this->cgen->create_label ();
+    int lbl_loop = this->cgen->create_label ();
+    
+    this->push_frame (FT_LOOP);
+    frame& frm = this->top_frame ();
+    frm.add_local (ast->get_var ()->get_name ());
+    int loop_var = frm.get_local (ast->get_var ()->get_name ())->index;
+    
+    // store range end
+    int end_var = frm.alloc_local ();
+    this->compile_expr (ran->get_rhs ());
+    this->cgen->emit_store (end_var);
+    
+    // setup index variable
+    this->compile_expr (ran->get_lhs ());
+    if (ran->lhs_exclusive ())
+      {
+        this->cgen->emit_push_int (1);
+        this->cgen->emit_add ();
+      }
+    this->cgen->emit_store (loop_var);
+    
+    frm.extra["subtype"] = FST_FOR;
+    frm.extra["last"] = lbl_done;
+    frm.extra["next"] = lbl_loop;
+    frm.extra["loop_var"] = loop_var;
+    frm.extra["index_var"] = loop_var;
+    frm.extra["on_range"] = 1;
+    
+    // test
+    this->cgen->mark_label (lbl_loop);
+    this->cgen->emit_load (loop_var);
+    this->cgen->emit_load (end_var);
+    if (ran->rhs_exclusive ())
+      this->cgen->emit_jge (lbl_done);
+    else
+      this->cgen->emit_jg (lbl_done);
+    
+    // body
+    this->compile_block (ast->get_body (), false);
+    
+    // increment index variable
+    this->cgen->emit_load (loop_var);
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_add ();
+    this->cgen->emit_store (loop_var);
+    this->cgen->emit_jmp (lbl_loop);
+    
+    this->cgen->mark_label (lbl_done);
+    
+    this->pop_frame ();
+  }
+  
+  void
   compiler::compile_for (ast_for *ast)
   {
+    if (ast->get_arg ()->get_type () == AST_RANGE)
+      {
+        this->compile_for_on_range (ast);
+        return;
+      }
+    
     int lbl_done = this->cgen->create_label ();
     int lbl_loop = this->cgen->create_label ();
     
@@ -141,6 +207,7 @@ namespace p6 {
     frm.extra["next"] = lbl_loop;
     frm.extra["loop_var"] = loop_var;
     frm.extra["index_var"] = index_var;
+    frm.extra["on_range"] = 0;
     
     
     // list

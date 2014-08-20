@@ -24,10 +24,13 @@
 
 namespace p6 {
   
+  class virtual_machine;
+  
+  
   /* 
    * Currently supported value types.
    */
-  enum p_value_type
+  enum p_value_type: unsigned char
   {
     PERL_UNDEF,
     PERL_REF,
@@ -43,12 +46,12 @@ namespace p6 {
   p_value_type p_get_ref_type (p_value_type type);
   
   
+  
   /* 
    * Represents an arbitrary Perl value.
    */
   struct p_value
   {
-    p_value_type type;
     union
       {
         long long i64;
@@ -70,7 +73,20 @@ namespace p6 {
           } arr;
         p_value *ref;
       } val;
+    
+    // fields used by the GC:
+    bool is_gc;               // to differentiate from plain references
+    p_value *gc_forward;
+    unsigned char gc_state;
+    unsigned char gc_protect;
+    
+    p_value_type type;
   };
+  
+  /* 
+   * Removes GC protection from the specified value.
+   */
+  void p_value_unprotect (p_value *val);
   
   /* 
    * Performs a deep copy.
@@ -97,8 +113,8 @@ namespace p6 {
    * Casting:
    */
   
-  p_value p_value_to_str (p_value& val);
-  p_value p_value_to_int (p_value& val);
+  p_value p_value_to_str (p_value& val, virtual_machine& vm);
+  p_value p_value_to_int (p_value& val, virtual_machine& vm);
   
   
   /* 
@@ -117,13 +133,13 @@ namespace p6 {
    * Operations:
    */
   
-  p_value p_value_add (p_value& a, p_value& b);
-  p_value p_value_sub (p_value& a, p_value& b);
-  p_value p_value_mul (p_value& a, p_value& b);
-  p_value p_value_div (p_value& a, p_value& b);
-  p_value p_value_mod (p_value& a, p_value& b);
+  p_value p_value_add (p_value& a, p_value& b, virtual_machine& vm);
+  p_value p_value_sub (p_value& a, p_value& b, virtual_machine& vm);
+  p_value p_value_mul (p_value& a, p_value& b, virtual_machine& vm);
+  p_value p_value_div (p_value& a, p_value& b, virtual_machine& vm);
+  p_value p_value_mod (p_value& a, p_value& b, virtual_machine& vm);
   
-  p_value p_value_concat (p_value& a, p_value& b);
+  p_value p_value_concat (p_value& a, p_value& b, virtual_machine& vm);
 }
 
 #endif

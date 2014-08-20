@@ -166,6 +166,8 @@ namespace p6 {
           count += _count_locals_needed_imp (afor->get_body (), vars);
           ++ count; // var
           ++ count; // anonymous index variable
+          if (afor->get_arg ()->get_type () == AST_RANGE)
+            ++ count; // end variable
         }
         break;
       

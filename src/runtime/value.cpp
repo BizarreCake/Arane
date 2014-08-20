@@ -17,6 +17,7 @@
  */
 
 #include "runtime/value.hpp"
+#include "runtime/vm.hpp"
 #include <stdexcept>
 #include <cstring>
 #include <sstream>
@@ -24,6 +25,17 @@
 
 
 namespace p6 {
+  
+  /* 
+   * Removes GC protection from the specified value.
+   */
+  void
+  p_value_unprotect (p_value *val)
+  {
+    val->gc_protect = false;
+  }
+  
+  
   
   /* 
    * Performs a deep copy.
@@ -301,7 +313,7 @@ namespace p6 {
    */
   
   p_value
-  p_value_add (p_value& a, p_value& b)
+  p_value_add (p_value& a, p_value& b, virtual_machine& vm)
   {
     p_value res;
     
@@ -331,7 +343,7 @@ namespace p6 {
   }
   
   p_value
-  p_value_sub (p_value& a, p_value& b)
+  p_value_sub (p_value& a, p_value& b, virtual_machine& vm)
   {
     p_value res;
     
@@ -361,7 +373,7 @@ namespace p6 {
   }
   
   p_value
-  p_value_mul (p_value& a, p_value& b)
+  p_value_mul (p_value& a, p_value& b, virtual_machine& vm)
   {
     p_value res;
     
@@ -391,7 +403,7 @@ namespace p6 {
   }
   
   p_value
-  p_value_div (p_value& a, p_value& b)
+  p_value_div (p_value& a, p_value& b, virtual_machine& vm)
   {
     p_value res;
     
@@ -423,7 +435,7 @@ namespace p6 {
   }
   
   p_value
-  p_value_mod (p_value& a, p_value& b)
+  p_value_mod (p_value& a, p_value& b, virtual_machine& vm)
   {
     p_value res;
     
@@ -457,15 +469,16 @@ namespace p6 {
   
   
   p_value
-  p_value_to_str (p_value& val)
+  p_value_to_str (p_value& val, virtual_machine& vm)
   {
     std::string str = p_value_str (val);
     
-    p_value *data = new p_value;
+    p_value *data = vm.get_gc ().alloc (true);
     data->type = PERL_DSTR;
     data->val.str.data = new char [str.length () + 1];
     data->val.str.len = str.length ();
     std::strcpy (data->val.str.data, str.c_str ());
+    vm.get_gc ().notify_increase (str.length () + 1);
     
     p_value res;
     res.type = PERL_REF;
@@ -513,7 +526,7 @@ namespace p6 {
   }
   
   p_value
-  p_value_to_int (p_value& val)
+  p_value_to_int (p_value& val, virtual_machine& vm)
   {
     p_value res;
     res.type = PERL_INT;
@@ -523,17 +536,18 @@ namespace p6 {
   
   
   p_value
-  p_value_concat (p_value& a, p_value& b)
+  p_value_concat (p_value& a, p_value& b, virtual_machine& vm)
   {
     std::string str;
     str.append (p_value_str (a));
     str.append (p_value_str (b));
     
-    p_value *data = new p_value;
+    p_value *data = vm.get_gc ().alloc (true);
     data->type = PERL_DSTR;
     data->val.str.data = new char [str.length () + 1];
     data->val.str.len = str.length ();
     std::strcpy (data->val.str.data, str.c_str ());
+    vm.get_gc ().notify_increase (str.length () + 1);
     
     p_value res;
     res.type = PERL_REF;

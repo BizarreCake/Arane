@@ -132,6 +132,7 @@ namespace p6 {
     void compile_while (ast_while *ast);
     
     void compile_for (ast_for *ast);
+    void compile_for_on_range (ast_for *ast);
     
     void compile_loop (ast_loop *ast);
     
