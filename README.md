@@ -16,7 +16,7 @@ yet. But the following is currently supported:
    * 'while', 'loop', and 'for' loop statements.
    * Basic subroutines
    * Packages and modules (all subroutines are exported at the moment)
-   * A simple garbage collector (see caveats)
+   * A simple incremental mark-sweep garbage collector.
    
 The following code snippet is an example of what can be compiled right now:
 ```perl
@@ -53,14 +53,6 @@ for @arr -> $p {
 }
 print "\n";
 ```
-   
-Caveats
--------
-
-The current garbage collector is pretty simple and inefficient (a basic
-mark-and-sweep collector that gets called in every 1000 allocations).
-Don't worry though! A proper moving/compacting generational incremental
-garbage collector will be implemented in the future.
    
 Compiling and Running
 ---------------------
