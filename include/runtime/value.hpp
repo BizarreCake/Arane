@@ -64,6 +64,7 @@ namespace p6 {
           {
             char *data;
             unsigned int len;
+            unsigned int cap;
           } str;
         struct
           {

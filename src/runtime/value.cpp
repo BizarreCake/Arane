@@ -23,6 +23,8 @@
 #include <sstream>
 #include <iomanip>
 
+#include <iostream> // DEBUG
+
 
 namespace p6 {
   
@@ -473,12 +475,14 @@ namespace p6 {
   {
     std::string str = p_value_str (val);
     
+    unsigned int cap = str.length () + 11;
     p_value *data = vm.get_gc ().alloc (true);
     data->type = PERL_DSTR;
-    data->val.str.data = new char [str.length () + 1];
+    data->val.str.data = new char [cap];
     data->val.str.len = str.length ();
+    data->val.str.cap = cap;
     std::strcpy (data->val.str.data, str.c_str ());
-    vm.get_gc ().notify_increase (str.length () + 1);
+    vm.get_gc ().notify_increase (cap);
     
     p_value res;
     res.type = PERL_REF;
@@ -535,19 +539,61 @@ namespace p6 {
   }
   
   
+  
+  static p_value
+  _concat_append_to_dstr (p_value& dest, p_value& val, virtual_machine& vm)
+  {
+    auto& data = dest.val.ref->val.str;
+    switch (val.type)
+      {
+      default:
+        {
+          std::string str = p_value_str (val);
+          
+          if (data.len + str.length () > data.cap)
+            {
+              // resize
+              
+              unsigned int ncap = data.cap * 2;
+              if (ncap + str.length () > data.cap)
+                ncap += str.length ();
+              char *arr = new char [ncap];
+              std::strcpy (arr, data.data);
+              
+              delete[] data.data;
+              data.data = arr;
+              
+              vm.get_gc ().notify_increase (ncap - data.cap);
+              data.cap = ncap;
+            }
+          
+          std::memcpy (data.data + data.len, str.c_str (), str.length () + 1);
+          data.len += str.length ();
+        }
+        break;
+      }
+    
+    return dest;
+  }
+  
   p_value
   p_value_concat (p_value& a, p_value& b, virtual_machine& vm)
   {
+    if (a.type == PERL_REF && a.val.ref && a.val.ref->type == PERL_DSTR)
+      return _concat_append_to_dstr (a, b, vm);
+    
     std::string str;
     str.append (p_value_str (a));
     str.append (p_value_str (b));
     
+    unsigned int cap = str.length () + 11;
     p_value *data = vm.get_gc ().alloc (true);
     data->type = PERL_DSTR;
-    data->val.str.data = new char [str.length () + 1];
+    data->val.str.data = new char [cap];
     data->val.str.len = str.length ();
+    data->val.str.cap = cap;
     std::strcpy (data->val.str.data, str.c_str ());
-    vm.get_gc ().notify_increase (str.length () + 1);
+    vm.get_gc ().notify_increase (cap);
     
     p_value res;
     res.type = PERL_REF;

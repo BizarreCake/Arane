@@ -251,7 +251,8 @@ namespace p6 {
         
         if (!emod)
           {
-            this->errs.error (ES_LINKER, "unresolved subroutine call `" + imp.name + "'");
+            this->errs.error (ES_LINKER, "unresolved subroutine call `" + imp.name + "'",
+              imp.ln, imp.col);
             return false;
           }
         

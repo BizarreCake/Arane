@@ -85,7 +85,6 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
     for (int i = 0; i < param_count; ++i)
       {
@@ -93,6 +92,7 @@ namespace p6 {
         *this->out << p_value_str (val);
       }
     
+    -- sp;
     stack[sp].type = PERL_INT;
     stack[sp].val.i64 = 1;
     ++ sp;
@@ -103,7 +103,6 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
     if (param_count < 2)
       {
@@ -141,7 +140,7 @@ namespace p6 {
     for (int i = 1; i < param_count; ++i)
       data.data[data.len++] = params.val.arr.data[i];
     
-    stack[sp++].type = PERL_UNDEF;
+    stack[sp - 1].type = PERL_UNDEF;
   }
   
   void
@@ -149,8 +148,8 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
+    -- sp;
     stack[sp].type = PERL_INT;
     stack[sp].val.i64 = param_count;
     ++ sp;
@@ -161,7 +160,6 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
     if (param_count != 4)
       {
@@ -208,7 +206,7 @@ namespace p6 {
         ch.val.i64 = start + i;
       }
     
-    p_value& val = stack[sp++];
+    p_value& val = stack[sp - 1];
     val.type = PERL_REF;
     val.val.ref = data;
     p_value_unprotect (data);
@@ -219,7 +217,6 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
     if (param_count < 2)
       {
@@ -270,10 +267,12 @@ namespace p6 {
       len = str_len - off;
     
     
+    unsigned int cap = len + 1;
     p_value *data = this->gc.alloc (true);
     data->type = PERL_DSTR;
-    data->val.str.data = new char [len + 1];
+    data->val.str.data = new char [cap];
     data->val.str.len = len;
+    data->val.str.cap = cap;
     if (str->type == PERL_CSTR)
       {
         for (int i = 0; i < len; ++i)
@@ -291,8 +290,9 @@ namespace p6 {
     res.type = PERL_REF;
     res.val.ref = data;
     
-    stack[sp++] = res;
+    stack[sp - 1] = res;
     p_value_unprotect (data);
+    this->gc.notify_increase (cap);
   }
   
   void
@@ -300,7 +300,6 @@ namespace p6 {
   {
     auto& params = this->get_param_array ();
     int param_count = params.val.arr.len;
-    -- sp;
     
     if (param_count != 1)
       {
@@ -324,6 +323,7 @@ namespace p6 {
         str_len = str->val.str.len;
       }
     
+    -- sp;
     stack[sp].type = PERL_INT;
     stack[sp].val.i64 = str_len;
     ++ sp;
@@ -336,17 +336,16 @@ namespace p6 {
       ? stack[bp - 2].val.ref    // default array
       : &this->get_param_array ();
     int arr_len = arr->val.arr.len;
-    -- sp;
     
     if (arr_len == 0)
       {
         // array empty, push undef
-        stack[sp++].type = PERL_UNDEF;
+        stack[sp - 1].type = PERL_UNDEF;
       }
     else
       {
         auto& data = arr->val.arr;
-        stack[sp++] = data.data[0];
+        stack[sp - 1] = data.data[0];
         
         // shift elements
         for (int i = 1; i < arr_len; ++i)
@@ -493,43 +492,43 @@ namespace p6 {
           
           // add
           case 0x10: 
+            stack[sp - 2] = p_value_add (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_add (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
           // sub
           case 0x11:
+            stack[sp - 2] = p_value_sub (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_sub (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
           // mul
           case 0x12:
+            stack[sp - 2] = p_value_mul (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_mul (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
           // div
           case 0x13:
+            stack[sp - 2] = p_value_div (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_div (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
-          // div
+          // mod
           case 0x14:
+            stack[sp - 2] = p_value_mod (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_mod (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
           // concat - concatenate two values together into a string.
           case 0x15:
+            stack[sp - 2] = p_value_concat (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
-            stack[sp - 1] = p_value_concat (stack[sp - 1], stack[sp], *this);
             _unprotect_external (stack[sp - 1]);
             break;
           
@@ -1062,6 +1061,16 @@ namespace p6 {
           // exit
           case 0xF0:
             goto done;
+          
+          // checkpoint
+          case 0xF1:
+            {
+              int n = *((int *)ptr);
+              ptr += 4;
+              
+              std::cout << "### CHECKPOINT " << n << " ###" << std::endl;
+            }
+            break;
           
 //------------------------------------------------------------------------------
           }

@@ -317,7 +317,20 @@ namespace p6 {
   compiler::compile_sub_push (ast_sub_call *ast)
   {
     
-  } 
+  }
+  
+  
+  
+  void
+  compiler::compile_sub_checkpoint (ast_sub_call *ast)
+  {
+    // 
+    // DEBUG
+    //
+    
+    ast_integer *n = static_cast<ast_integer *> (ast->get_params ()->get_elems ()[0]);
+    this->cgen->emit_checkpoint (n->get_value ()); 
+  }
   
 //------------------------------------------------------------------------------
   
@@ -345,6 +358,13 @@ namespace p6 {
       { "next", &compiler::compile_sub_next },
       { "push", &compiler::compile_sub_push },
     };
+    
+    // DEBUG
+    if (name == "checkpoint")
+      {
+        this->compile_sub_checkpoint (ast);
+        return;
+      }
     
     // parameters
     this->compile_list (ast->get_params ());

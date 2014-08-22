@@ -181,7 +181,8 @@ namespace p6 {
           }
         else
           {
-            this->mod->import_sub (suse.name, suse.pos + 1); // skip the opcode
+            this->mod->import_sub (suse.name, suse.pos + 1, // skip the opcode
+              suse.ast->get_line (), suse.ast->get_column ());
           }
       }
   }

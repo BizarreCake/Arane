@@ -26,7 +26,7 @@ namespace p6 {
   
 #define GC_MARK_LIMIT         2048
 #define GC_SWEEP_LIMIT          12
-#define GC_ALLOC_THRESHOLD    1024
+#define GC_ALLOC_THRESHOLD     448
 
 
 //#define GC_DEBUG
@@ -249,7 +249,7 @@ namespace p6 {
   {
     if (!val)
       return;
-    if (val->gc_state != this->curr_white)
+    if (val->gc_state == GC_GRAY)
       return;
     
     ++ this->marked;
@@ -274,8 +274,9 @@ namespace p6 {
         p_value& val = this->vm.stack[i];
         if ((val.type == PERL_REF) && val.val.ref && val.val.ref->is_gc)
           {
-            val.gc_state = GC_GRAY;
-            this->grays.push_back (&val);
+            val.gc_state = GC_BLACK;
+            val.val.ref->gc_state = GC_GRAY;
+            this->grays.push_back (val.val.ref);
             ++ this->marked_roots;
           }
       }
@@ -288,8 +289,9 @@ namespace p6 {
         p_value& val = p.second;
         if ((val.type == PERL_REF) && val.val.ref && val.val.ref->is_gc)
           {
-            val.gc_state = GC_GRAY;
-            this->grays.push_back (&val);
+            val.gc_state = GC_BLACK;
+            val.val.ref->gc_state = GC_GRAY;
+            this->grays.push_back (val.val.ref);
           }
       }
   }
@@ -370,7 +372,7 @@ namespace p6 {
       
       case PERL_DSTR:
         delete[] val.val.str.data;
-        this->ext_bytes -= val.val.str.len + 1;
+        this->ext_bytes -= val.val.str.cap;
         break;
       
       default: ;
@@ -427,7 +429,7 @@ namespace p6 {
             
             GC_IF_DEBUG(std::cout << "      USED OBJECT @#" << obj_index << std::endl;)
             p_value& val = page->objs[obj_index];
-            if (val.gc_state == this->curr_white)
+            if ((val.gc_state == this->curr_white) && !val.gc_protect)
               {
                 // dead object
                 
@@ -535,14 +537,14 @@ namespace p6 {
     switch (this->state)
       {
       case gc::GCS_NONE:
-        // flip current white color
-        this->curr_white = _opposite_white (this->curr_white);
-        
         GC_IF_DEBUG(std::cout << "  GC INC MARK START: [sp: " << this->vm.sp << "]" << std::endl;)
         this->marked = 0;
         this->marked_roots = 0;
         this->mark_roots ();
         this->state = gc::GCS_MARK;
+        
+        // flip current white color
+        this->curr_white = _opposite_white (this->curr_white);
         break;
       
       case gc::GCS_MARK:
@@ -575,8 +577,6 @@ namespace p6 {
   p_value*
   garbage_collector::alloc (bool protect)
   {
-    auto page = this->pages;
-    
     ++ this->alloc_count;
     ++ this->total_alloc_count;
     long long ext_inc = this->ext_bytes - this->last_ext_bytes;
@@ -598,7 +598,6 @@ namespace p6 {
       }
     if (act != NOTHING)
       {
-        // perform one GC cycle
         if (act == CYCLE)
           this->work ();
         else if (act == FULL)
@@ -609,7 +608,8 @@ namespace p6 {
         this->last_ext_bytes = this->ext_bytes;
       }
     
-    if (!_page_space_available (page))
+    auto page = this->pages;
+    if (!page || !_page_space_available (page))
       {
         // create new page
         page = this->alloc_page ();
@@ -636,7 +636,7 @@ namespace p6 {
     
     // restore GC fields
     val->is_gc = true;
-    val->gc_state = _opposite_white (this->curr_white);
+    val->gc_state = this->curr_white;
     val->gc_protect = protect;
     
     return val;

@@ -86,11 +86,13 @@ namespace p6 {
    * Inserts the specified subroutine import into the module.
    */    
   void
-  module::import_sub (const std::string& name, unsigned int pos)
+  module::import_sub (const std::string& name, unsigned int pos, int ln, int col)
   {
     this->imsubs.push_back ({
       .name = name,
       .pos = pos,
+      .ln = ln,
+      .col = col,
     });
   }
   

@@ -145,6 +145,7 @@ namespace p6 {
     void emit_load_arg_array ();
     
     void emit_exit ();
+    void emit_checkpoint (int n);
     
 //------------------------------------------------------------------------------
   };

@@ -183,6 +183,7 @@ namespace p6 {
     void compile_sub_last (ast_sub_call *ast);
     void compile_sub_next (ast_sub_call *ast);
     void compile_sub_push (ast_sub_call *ast);
+    void compile_sub_checkpoint (ast_sub_call *ast);
   };
 }
 

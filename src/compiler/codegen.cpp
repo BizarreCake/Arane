@@ -531,5 +531,12 @@ namespace p6 {
   {
     this->buf.put_byte (0xF0);
   }
+  
+  void
+  code_generator::emit_checkpoint (int n)
+  {
+    this->buf.put_byte (0xF1);
+    this->buf.put_int (n);
+  }
 }
 

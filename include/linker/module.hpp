@@ -50,6 +50,8 @@ namespace p6 {
   {
     std::string name;
     unsigned int pos; // the location of the call offset
+    
+    int ln, col; // position in code
   };
   
   
@@ -121,7 +123,7 @@ namespace p6 {
     /* 
      * Inserts the specified subroutine import into the module.
      */    
-    void import_sub (const std::string& name, unsigned int pos);
+    void import_sub (const std::string& name, unsigned int pos, int ln, int col);
     
     /* 
      * Inserts the specified relocatino into the relocation list.
