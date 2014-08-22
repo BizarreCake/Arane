@@ -22,8 +22,22 @@ The following code snippet is an example of what can be compiled right now:
 ```perl
 package Primes {
   
+  #= Computes the integer square root of a number.
+  sub isqrt ($s) {
+    my $n = $s / 2;
+    for 1..15 -> $i {
+      my $m = ($n + $s/$n)/2;
+      if $m == $n {
+        return $n;
+      }
+      $n = $m;
+    }
+    return $n;
+  }
+  
+  #= Checks whether a number is prime.
   sub is_prime ($n) {
-    for 2..^$n -> $i {
+    for 2..isqrt($n) -> $i {
       if $n % $i == 0 {
         return 0;
       }
@@ -31,10 +45,11 @@ package Primes {
     return 1;
   }
 
+  #= Generates primes number up to the specified upper bound.
   sub gen_primes ($count) {
     my $primes = [];
     my $pc = 0;
-    loop (my $i = 2; $i < $count; $i = $i + 1) {
+    loop (my $i = 3; $i < $count; $i = $i + 2) {
       if is_prime $i {
         @{$primes}[$pc] = $i;
         $pc = $pc + 1;
@@ -43,7 +58,7 @@ package Primes {
     
     return $primes;
   }
-}
+} 
 
 
 my $primes = Primes::gen_primes 100;
