@@ -858,7 +858,8 @@ namespace p6 {
               
               // reserve enough space for the local variables
               bp = sp - 1;
-              sp += locs;
+              for (unsigned int i = 0; i < locs; ++i)
+                stack[sp++].type = PERL_UNDEF;
             }
             break;
           

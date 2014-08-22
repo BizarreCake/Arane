@@ -272,6 +272,24 @@ namespace p6 {
     for (int i = 0; i < sp; ++i)
       {
         p_value& val = this->vm.stack[i];
+        
+        /*
+        if (val.type == PERL_REF)
+          {
+            if (val.val.ref)
+              {
+                if (val.val.ref->is_gc)
+                  {
+                    val.gc_state = GC_BLACK;
+                    val.val.ref->gc_state = GC_GRAY;
+                    this->grays.push_back (val.val.ref);
+                    ++ this->marked_roots;
+                  }
+              }
+          }
+        */
+        
+        //if (false)
         if ((val.type == PERL_REF) && val.val.ref && val.val.ref->is_gc)
           {
             val.gc_state = GC_BLACK;
@@ -314,7 +332,9 @@ namespace p6 {
           auto& data = val->val.arr;
           for (unsigned int i = 0; i < data.len; ++i)
             {
-              this->paint_gray (&data.data[i]);
+              auto& v = data.data[i];
+              if ((v.type == PERL_REF) && v.val.ref && v.val.ref->is_gc)
+                this->paint_gray (v.val.ref);
             }
         }
         break;
@@ -636,7 +656,7 @@ namespace p6 {
     
     // restore GC fields
     val->is_gc = true;
-    val->gc_state = this->curr_white;
+    val->gc_state = _opposite_white (this->curr_white);
     val->gc_protect = protect;
     
     return val;
