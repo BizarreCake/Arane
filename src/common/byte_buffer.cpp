@@ -18,7 +18,7 @@
 
 #include "common/byte_buffer.hpp"
 #include <cstring>
-#include <malloc.h>
+#include <cstdlib>
 #include <new>
 
 
