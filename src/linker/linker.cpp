@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 #include <iostream> // DEBUG
 
 
-namespace p6 {
+namespace arane {
   
   linker::linker (error_tracker& errs)
     : errs (errs)

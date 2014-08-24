@@ -1,9 +1,8 @@
-P6
-==
+Arane
+=====
 
-P6 is a bytecode compiler and interpreter for the Perl 6 language written in
-C++11 that I am currently working on.  I'm not good with names, so the
-compiler's called P6 for now..
+Arane is a bytecode compiler and interpreter for the Perl 6 language written in
+C++11 that I am currently working on.
 
 Features
 --------
@@ -72,7 +71,7 @@ print "\n";
 Compiling and Running
 ---------------------
 
-To compile P6, you will need a relatively new GCC C++ compiler with support
+To compile Arane, you will need a relatively new GCC C++ compiler with support
 for C++11, and a copy of CMake.  In the project's root directory, type:
 ```
 cmake -G "Unix Makefiles"
@@ -80,9 +79,9 @@ make
 ```
 
 The resulting executable could be then found inside the newly created `build`
-directory (named `p6`).  To run a Perl file, type:
+directory (named `arane`).  To run a Perl file, type:
 ```
-./p6 <file>
+./arane <file>
 ```
 
 And that's it!

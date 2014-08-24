@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <stack>
 
 
-namespace p6 {
+namespace arane {
   
   namespace {
     
@@ -351,6 +351,41 @@ namespace p6 {
   
   
   
+  static ast_typename*
+  _parse_typename (parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    
+    token tok = toks.next ();
+    int p_ln = tok.ln;
+    int p_col = tok.col;
+    
+    ast_typename_type tn;
+    switch (tok.typ)
+      {
+      case TOK_TYPE_INT_NATIVE: tn = AST_TN_INT_NATIVE; break;
+      case TOK_TYPE_INT: tn = AST_TN_INT; break;
+      
+      default:
+        throw std::runtime_error ("not a typename");
+      }
+    
+    ast_expr *param = nullptr;
+    tok = toks.peek_next ();
+    if (tok.typ == TOK_LPAREN)
+      param = _parse_list (ps);
+    else
+      param = _parse_atom (ps);
+    if (!param)
+      return nullptr;
+    
+    auto ast = new ast_typename (tn, param);
+    ast->set_pos (p_ln, p_col);
+    return ast;
+  }
+  
+  
+  
   static ast_interp_string*
   _parse_interp_string (parser_state& ps)
   {
@@ -433,9 +468,19 @@ namespace p6 {
                 break;
               }
             
-            ast_ident *ident = _parse_ident (ps);
-            if (ident)
-              sub->add_param (ident);
+            ast_expr *atom = _parse_atom (ps);
+            if (atom)
+              {
+                if ((atom->get_type () == AST_IDENT) || (atom->get_type () == AST_TYPENAME))
+                  sub->add_param (atom);
+                else
+                  {
+                    ps.errs.error (ES_PARSER, "expected an identifier or a type "
+                      "name followed by an identifier in subroutine's parameter "
+                      "list", tok.ln, tok.col);
+                    return nullptr;
+                  }
+              }
             
             tok = toks.peek_next ();
             if (tok.typ == TOK_COMMA)
@@ -545,6 +590,11 @@ namespace p6 {
       // named unary operators
       case TOK_MY:
         return _parse_named_unop (ps);
+      
+      // typenames
+      case TOK_TYPE_INT_NATIVE:
+      case TOK_TYPE_INT:
+        return _parse_typename (ps);
       
       case TOK_IDENT_NONE:
       case TOK_IDENT_SCALAR:

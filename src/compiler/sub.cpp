@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
@@ -26,7 +26,7 @@
 #include <iostream> // DEBUG
 
 
-namespace p6 {
+namespace arane {
   
   static bool
   _is_declerative_unop (ast_named_unop *unop)
@@ -42,7 +42,62 @@ namespace p6 {
   }
   
   
-  static unsigned int
+  // forward dec:
+  static unsigned int _count_locals_needed_imp (ast_node *ast,
+    std::unordered_set<std::string>& vars);
+  
+  static unsigned
+  _count_locals_needed_for_named_unop (ast_named_unop *unop, ast_expr *param,
+    std::unordered_set<std::string>& vars)
+  {
+    unsigned int count = 0;
+    if (param->get_type () == AST_LIST)
+      {
+        ast_list *lst = static_cast<ast_list *> (param);
+        for (ast_expr *elem : lst->get_elems ())
+          {
+            if (elem->get_type () == AST_IDENT)
+              {
+                if (_is_declerative_unop (unop))
+                  {
+                    ast_ident *ident = static_cast<ast_ident *> (elem);
+                    if (vars.find (ident->get_name ()) == vars.end ())
+                      {
+                        vars.insert (ident->get_name ());
+                        ++ count;
+                      }
+                  }
+              }
+            else
+              count += _count_locals_needed_imp (elem, vars);
+            
+            // TODO: handle lists in lists?
+          }
+      }
+    else if (param->get_type () == AST_IDENT)
+      {
+        if (_is_declerative_unop (unop))
+          {
+            ast_ident *ident = static_cast<ast_ident *> (param);
+            if (vars.find (ident->get_name ()) == vars.end ())
+              {
+                vars.insert (ident->get_name ());
+                ++ count;
+              }
+          }
+      }
+    else if (param->get_type () == AST_TYPENAME)
+      {
+        count += _count_locals_needed_for_named_unop (unop,
+          (static_cast<ast_typename *> (param))->get_param (), vars);
+      }
+    else
+      count += _count_locals_needed_imp (param, vars);
+    
+    return count; 
+  }
+  
+  unsigned int
   _count_locals_needed_imp (ast_node *ast, std::unordered_set<std::string>& vars)
   {
     unsigned int count = 0;
@@ -52,44 +107,8 @@ namespace p6 {
       case AST_NAMED_UNARY:
         {
           ast_named_unop *unop = static_cast<ast_named_unop *> (ast);
-          ast_expr *param = unop->get_param ();
-          if (param->get_type () == AST_LIST)
-            {
-              ast_list *lst = static_cast<ast_list *> (param);
-              for (ast_expr *elem : lst->get_elems ())
-                {
-                  if (elem->get_type () == AST_IDENT)
-                    {
-                      if (_is_declerative_unop (unop))
-                        {
-                          ast_ident *ident = static_cast<ast_ident *> (elem);
-                          if (vars.find (ident->get_name ()) == vars.end ())
-                            {
-                              vars.insert (ident->get_name ());
-                              ++ count;
-                            }
-                        }
-                    }
-                  else
-                    count += _count_locals_needed_imp (elem, vars);
-                  
-                  // TODO: handle lists in lists?
-                }
-            }
-          else if (param->get_type () == AST_IDENT)
-            {
-              if (_is_declerative_unop (unop))
-                {
-                  ast_ident *ident = static_cast<ast_ident *> (param);
-                  if (vars.find (ident->get_name ()) == vars.end ())
-                    {
-                      vars.insert (ident->get_name ());
-                      ++ count;
-                    }
-                }
-            }
-          else
-            count += _count_locals_needed_imp (param, vars);
+          count += _count_locals_needed_for_named_unop (unop,
+            unop->get_param (), vars);
         }
         break;
       
@@ -479,7 +498,40 @@ namespace p6 {
     for (unsigned int i = 0; i < params.size (); ++i)
       {
         auto& param = params[i];
-        frm.add_arg (param.ident->get_name ());
+        auto expr = param.expr;
+        switch (expr->get_type ())
+          {
+          case AST_IDENT:
+            frm.add_arg ((static_cast<ast_ident *> (expr))->get_name ());
+            break;
+          
+          case AST_TYPENAME:
+            {
+              ast_typename *tn = static_cast<ast_typename *> (expr);
+              if (tn->get_param ()->get_type () != AST_IDENT)
+                {
+                  this->errs.error (ES_COMPILER, "expected an identifier after "
+                    "type name in subroutine parameter list", tn->get_line (),
+                    tn->get_column ());
+                  return;
+                }
+              
+              ast_ident *ident = static_cast<ast_ident *> (tn->get_param ());
+              switch (tn->get_op ())
+                {
+                case AST_TN_INT:
+                  frm.add_arg (ident->get_name (), VT_INT);
+                  break;
+                case AST_TN_INT_NATIVE:
+                  frm.add_arg (ident->get_name (), VT_INT_NATIVE);
+                  break;
+                }
+            }
+            break;
+          
+          default:
+            throw std::runtime_error ("invalid parameter type");
+          }
       }
     
     // compile the body

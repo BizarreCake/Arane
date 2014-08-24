@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,14 +16,14 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _P6__AST__H_
-#define _P6__AST__H_
+#ifndef _ARANE__AST__H_
+#define _ARANE__AST__H_
 
 #include <vector>
 #include <string>
 
 
-namespace p6 {
+namespace arane {
   
   enum ast_type
   {
@@ -54,6 +54,7 @@ namespace p6 {
     AST_MODULE,
     AST_PACKAGE,
     AST_USE,
+    AST_TYPENAME,
   };
   
   
@@ -365,6 +366,10 @@ namespace p6 {
   enum ast_unop_type
   {
     AST_UNOP_MY,
+    
+    // types:
+    AST_UNOP_TYPE_INT_NATIVE,
+    AST_UNOP_TYPE_INT,
   };
   
   /* 
@@ -389,9 +394,32 @@ namespace p6 {
   };
   
   
+  enum ast_typename_type
+  {
+    AST_TN_INT_NATIVE,      // int
+    AST_TN_INT,             // Int
+  };
+  
+  class ast_typename: public ast_expr
+  {
+    ast_typename_type type;
+    ast_expr *param;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_TYPENAME; }
+    
+    inline ast_typename_type get_op () const { return this->type; }
+    inline ast_expr* get_param () { return this->param; }
+    
+  public:
+    ast_typename (ast_typename_type type, ast_expr *param = nullptr);
+    ~ast_typename ();
+  };
+  
+  
   struct ast_sub_param
   {
-    ast_ident *ident;
+    ast_expr *expr;
   };
   
   /* 
@@ -415,7 +443,7 @@ namespace p6 {
     ~ast_sub ();
     
   public:
-    void add_param (ast_ident *ident);
+    void add_param (ast_expr *param);
     void set_body (ast_block *block);
   };
   

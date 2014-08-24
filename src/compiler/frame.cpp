@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,14 +12,14 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "compiler/frame.hpp"
 
 
-namespace p6 {
+namespace arane {
   
   frame::frame (frame_type type, frame *parent)
   {
@@ -86,12 +86,13 @@ namespace p6 {
    * Inserts a new local variable to the frame's local variable list.
    */
   void
-  frame::add_local (const std::string& name)
+  frame::add_local (const std::string& name, variable_type typ)
   {
     int index = this->locs.size ();
     this->locs.push_back ({
       .index = this->get_next_loc_index (),
       .name = name,
+      .type = typ,
     });
     
     this->loc_map[name] = index;
@@ -101,12 +102,13 @@ namespace p6 {
    * Inserts a new argument to the frame's argument list.
    */
   void
-  frame::add_arg (const std::string& name)
+  frame::add_arg (const std::string& name, variable_type typ)
   {
     int index = this->args.size ();
     this->args.push_back ({
       .index = index,
       .name = name,
+      .type = typ,
     });
     
     this->arg_map[name] = index;

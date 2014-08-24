@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,21 +12,22 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "runtime/gc.hpp"
 #include "runtime/vm.hpp"
+#include "runtime/bigint.hpp"
 
 #include <iostream> // DEBUG
 
 
-namespace p6 {
+namespace arane {
   
 #define GC_MARK_LIMIT         2048
 #define GC_SWEEP_LIMIT          12
-#define GC_ALLOC_THRESHOLD     448
+#define GC_ALLOC_THRESHOLD     128
 
 
 //#define GC_DEBUG
@@ -393,6 +394,10 @@ namespace p6 {
       case PERL_DSTR:
         delete[] val.val.str.data;
         this->ext_bytes -= val.val.str.cap;
+        break;
+      
+      case PERL_BIGINT:
+        delete val.val.bint;
         break;
       
       default: ;

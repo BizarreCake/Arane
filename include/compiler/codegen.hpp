@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,12 +12,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _P6__CODEGEN__H_
-#define _P6__CODEGEN__H_
+#ifndef _ARANE__CODEGEN__H_
+#define _ARANE__CODEGEN__H_
 
 #include "common/byte_buffer.hpp"
 #include <unordered_map>
@@ -25,7 +25,7 @@
 #include <string>
 
 
-namespace p6 {
+namespace arane {
   
   /* 
    * Wraps around a byte buffer, and provides methods to emit bytecode.
@@ -128,6 +128,7 @@ namespace p6 {
     
     void emit_to_str ();
     void emit_to_int ();
+    void emit_to_bint ();
     
     void emit_push_frame (unsigned int locs);
     void emit_pop_frame ();

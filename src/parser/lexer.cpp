@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <unordered_map>
 
 
-namespace p6 {
+namespace arane {
   
   static void
   _destroy_token (token tok)
@@ -689,6 +689,9 @@ namespace p6 {
       { "package", TOK_PACKAGE },
       { "use", TOK_USE },
       { "eq", TOK_EQ_S },
+      
+      { "int", TOK_TYPE_INT_NATIVE },
+      { "Int", TOK_TYPE_INT },
     };
     
     auto itr = _map.find (str);

@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include <cstring>
 
 
-namespace p6 {
+namespace arane {
   
   ast_node::ast_node ()
   {
@@ -233,17 +233,17 @@ namespace p6 {
   ast_sub::~ast_sub ()
   {
     for (ast_sub_param& param : this->params)
-      delete param.ident;
+      delete param.expr;
     delete this->body;
   }
   
   
   
   void
-  ast_sub::add_param (ast_ident *ident)
+  ast_sub::add_param (ast_expr *param)
   {
     this->params.push_back ({
-      .ident = ident,
+      .expr = param,
     });
   }
   
@@ -435,5 +435,20 @@ namespace p6 {
   ast_use::ast_use (const std::string& what)
     : what (what)
     { }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_typename::ast_typename (ast_typename_type type, ast_expr *param)
+  {
+    this->type = type;
+    this->param = param;
+  }
+  
+  ast_typename::~ast_typename ()
+  {
+    delete this->param;
+  }
 }
 

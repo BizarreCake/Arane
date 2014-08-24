@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
@@ -21,7 +21,7 @@
 #include "compiler/frame.hpp"
 
 
-namespace p6 {
+namespace arane {
   
   /* 
    * Right-hand side value is expected to be at the top of the stack.
@@ -64,6 +64,23 @@ namespace p6 {
   }
   
   
+  static void
+  _enforce_type_constraint (code_generator *cgen, variable_type vt)
+  {
+    switch (vt)
+      {
+      case VT_INT_NATIVE:
+        cgen->emit_to_int ();
+        break;
+      
+      case VT_INT:
+        cgen->emit_to_bint ();
+        break;
+      
+      default: ;
+      }
+  }
+  
   void
   compiler::assign_to_ident (ast_ident *lhs, ast_expr *rhs)
   {
@@ -83,12 +100,16 @@ namespace p6 {
     frame& frm = this->top_frame ();
     variable *var = frm.get_local (lhs->get_name ());
     if (var)
-      this->cgen->emit_storeload (var->index);
+      {
+        _enforce_type_constraint (this->cgen, var->type);
+        this->cgen->emit_storeload (var->index);
+      }
     else
       {
         var = frm.get_arg (lhs->get_name ());
         if (var)
           {
+            _enforce_type_constraint (this->cgen, var->type);
             this->cgen->emit_dup ();
             this->cgen->emit_arg_store (var->index);
           }
@@ -223,37 +244,62 @@ namespace p6 {
       }
   }
   
+  
   static bool
-  _add_locals (error_tracker& errs, ast_named_unop *unop, frame& frm)
+  _add_local (error_tracker& errs, frame& frm, ast_expr *expr,
+    variable_type vt = VT_NONE)
   {
-    switch (unop->get_param ()->get_type ())
+    switch (expr->get_type ())
       {
       case AST_IDENT:
         {
-          ast_ident *ident = static_cast<ast_ident *> (unop->get_param ());
+          ast_ident *ident = static_cast<ast_ident *> (expr);
           const std::string& name = ident->get_name ();
           if (name.find (':') != std::string::npos)
             {
               errs.error (ES_COMPILER,
                 "invalid local variable name `" + ident->get_decorated_name () + "'",
-                unop->get_line (), unop->get_column ());
+                expr->get_line (), expr->get_column ());
               return false;
             }
           
-          frm.add_local (name);
+          frm.add_local (name, vt);
         }
         break;
       
       case AST_LIST:
         {
-          ast_list *lst = static_cast<ast_list *> (unop->get_param ());
+          ast_list *lst = static_cast<ast_list *> (expr);
           for (ast_expr *elem : lst->get_elems ())
             {
               if (elem->get_type () == AST_IDENT)
                 {
                   ast_ident *ident = static_cast<ast_ident *> (elem);
-                  frm.add_local (ident->get_name ());
+                  frm.add_local (ident->get_name (), vt);
                 }
+            }
+        }
+        break;
+      
+      case AST_TYPENAME:
+        {
+          ast_typename *atn = static_cast<ast_typename *> (expr);
+          switch (atn->get_op ())
+            {
+            // int
+            case AST_TN_INT_NATIVE:
+              _add_local (errs, frm, atn->get_param (), VT_INT_NATIVE);
+              break;
+            
+            // Int
+            case AST_TN_INT:
+              _add_local (errs, frm, atn->get_param (), VT_INT);
+              break;
+            
+            default:
+              errs.error (ES_COMPILER, "invalid type name",
+                atn->get_line (), atn->get_column ());
+              return false;
             }
         }
         break;
@@ -262,6 +308,12 @@ namespace p6 {
       }
     
     return true;
+  }
+  
+  static bool
+  _add_locals (error_tracker& errs, ast_named_unop *unop, frame& frm)
+  {
+    return _add_local (errs, frm, unop->get_param ());
   }
   
   void
@@ -287,6 +339,10 @@ namespace p6 {
               return;
             }
         }
+      
+      case AST_TYPENAME:
+        this->compile_assign ((static_cast<ast_typename *> (lhs))->get_param (), rhs);
+        break;
       
       case AST_IDENT:
         this->assign_to_ident (static_cast<ast_ident *> (lhs), rhs);

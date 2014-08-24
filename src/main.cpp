@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #include "linker/linker.hpp"
 #include "runtime/vm.hpp"
 
-using namespace p6;
+using namespace arane;
 
 
 
@@ -216,7 +216,7 @@ main (int argc, char *argv[])
 {
   if (argc != 2)
     {
-      std::cout << "Usage: p6 <file>" << std::endl;
+      std::cout << "Usage: arane <file>" << std::endl;
       return -1;
     }
   

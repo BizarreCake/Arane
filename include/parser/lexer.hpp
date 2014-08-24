@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,8 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _P6__LEXER__H_
-#define _P6__LEXER__H_
+#ifndef _ARANE__LEXER__H_
+#define _ARANE__LEXER__H_
 
 #include <stdexcept>
 #include <string>
@@ -26,7 +26,7 @@
 #include <stack>
 
 
-namespace p6 {
+namespace arane {
   
   /* 
    * Exceptions of this type are thrown by the lexer whenever it encounters
@@ -110,6 +110,8 @@ namespace p6 {
     
     // named unary operators:
     TOK_MY,
+    TOK_TYPE_INT_NATIVE,
+    TOK_TYPE_INT,
     
     // keywords:
     TOK_SUBROUTINE,

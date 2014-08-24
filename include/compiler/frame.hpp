@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,24 +12,32 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _P6__COMPILER__FRAME__H_
-#define _P6__COMPILER__FRAME__H_
+#ifndef _ARANE__COMPILER__FRAME__H_
+#define _ARANE__COMPILER__FRAME__H_
 
 #include <string>
 #include <vector>
 #include <unordered_map>
 
 
-namespace p6 {
+namespace arane {
+  
+  enum variable_type
+  {
+    VT_NONE,
+    VT_INT_NATIVE,
+    VT_INT,
+  };
   
   struct variable
   {
     int index;
     std::string name;
+    variable_type type;
   };
   
   
@@ -96,12 +104,12 @@ namespace p6 {
     /* 
      * Inserts a new local variable to the frame's local variable list.
      */
-    void add_local (const std::string& name);
+    void add_local (const std::string& name, variable_type typ = VT_NONE);
     
     /* 
      * Inserts a new argument to the frame's argument list.
      */
-    void add_arg (const std::string& name);
+    void add_arg (const std::string& name, variable_type typ = VT_NONE);
     
     
     

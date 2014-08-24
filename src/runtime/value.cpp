@@ -1,5 +1,5 @@
 /*
- * P6 - A Perl 6 interpreter.
+ * Arane - A Perl 6 interpreter.
  * Copyright (C) 2014 Jacob Zhitomirsky
  *
  * This program is free software: you can redistribute it and/or modify
@@ -12,12 +12,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNwU General Public License
+ * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "runtime/value.hpp"
 #include "runtime/vm.hpp"
+#include "runtime/bigint.hpp"
 #include <stdexcept>
 #include <cstring>
 #include <sstream>
@@ -26,7 +27,7 @@
 #include <iostream> // DEBUG
 
 
-namespace p6 {
+namespace arane {
   
   /* 
    * Removes GC protection from the specified value.
@@ -81,6 +82,7 @@ namespace p6 {
           {
           case PERL_DSTR:
           case PERL_ARRAY:
+          case PERL_BIGINT:
             return p_value_str (*ref);
             
           default:
@@ -121,6 +123,13 @@ namespace p6 {
           std::ostringstream ss;
           ss << val.val.i64;
           return ss.str ();
+        }
+        
+      case PERL_BIGINT:
+        {
+          std::string str;
+          val.val.bint->to_str (str);
+          return str;
         }
         
       case PERL_ARRAY:
@@ -179,6 +188,17 @@ namespace p6 {
           case PERL_INT:
             return a.val.i64 == b.val.i64;
           
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              case PERL_BIGINT:
+                return (b.val.ref->val.bint->cmp (a.val.i64) == 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
           default:
             return false;
           }
@@ -199,8 +219,29 @@ namespace p6 {
         break;
       
       case PERL_REF:
-        if (a.val.ref->type == PERL_DSTR)
-          return p_value_eq (b, *a.val.ref);
+        switch (a.val.ref->type)
+          {
+          case PERL_DSTR:
+            return p_value_eq (b, *a.val.ref);
+          
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                return (a.val.ref->val.bint->cmp (b.val.i64) == 0);
+              
+              case PERL_BIGINT:
+                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) == 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
       
       default:
         return a.type == b.type;
@@ -217,6 +258,42 @@ namespace p6 {
           {
           case PERL_INT:
             return a.val.i64 < b.val.i64;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              case PERL_BIGINT:
+                return (b.val.ref->val.bint->cmp (a.val.i64) >= 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_DSTR:
+            return p_value_eq (b, *a.val.ref);
+          
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                return (a.val.ref->val.bint->cmp (b.val.i64) < 0);
+              
+              case PERL_BIGINT:
+                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) < 0);
+              
+              default:
+                return false;
+              }
+            break;
           
           default:
             return false;
@@ -239,6 +316,42 @@ namespace p6 {
           case PERL_INT:
             return a.val.i64 <= b.val.i64;
           
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              case PERL_BIGINT:
+                return (b.val.ref->val.bint->cmp (a.val.i64) > 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_DSTR:
+            return p_value_eq (b, *a.val.ref);
+          
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                return (a.val.ref->val.bint->cmp (b.val.i64) <= 0);
+              
+              case PERL_BIGINT:
+                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) <= 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
           default:
             return false;
           }
@@ -260,6 +373,42 @@ namespace p6 {
           case PERL_INT:
             return a.val.i64 > b.val.i64;
           
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              case PERL_BIGINT:
+                return (b.val.ref->val.bint->cmp (a.val.i64) <= 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_DSTR:
+            return p_value_eq (b, *a.val.ref);
+          
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                return (a.val.ref->val.bint->cmp (b.val.i64) > 0);
+              
+              case PERL_BIGINT:
+                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) > 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
           default:
             return false;
           }
@@ -280,6 +429,42 @@ namespace p6 {
           {
           case PERL_INT:
             return a.val.i64 >= b.val.i64;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              case PERL_BIGINT:
+                return (b.val.ref->val.bint->cmp (a.val.i64) < 0);
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_DSTR:
+            return p_value_eq (b, *a.val.ref);
+          
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                return (a.val.ref->val.bint->cmp (b.val.i64) >= 0);
+              
+              case PERL_BIGINT:
+                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) >= 0);
+              
+              default:
+                return false;
+              }
+            break;
           
           default:
             return false;
@@ -324,10 +509,85 @@ namespace p6 {
       case PERL_INT:
         switch (b.type)
           {
-          // Int + Int
+          // int + int
           case PERL_INT:
             res.type = PERL_INT;
             res.val.i64 = a.val.i64 + b.val.i64;
+            break;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              // int + Int
+              case PERL_BIGINT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (a.val.i64);
+                  data->val.bint->add (*b.val.ref->val.bint);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
+            break;
+          
+          default:
+            res.type = PERL_UNDEF;
+            break;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              // Int + int
+              case PERL_INT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (*a.val.ref->val.bint);
+                  data->val.bint->add (b.val.i64);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  // Int + Int
+                  case PERL_BIGINT:
+                    {
+                      p_value *data = vm.get_gc ().alloc (true);
+                      data->type = PERL_BIGINT;
+                      data->val.bint = new big_int (*a.val.ref->val.bint);
+                      data->val.bint->add (*b.val.ref->val.bint);
+                      
+                      res.type = PERL_REF;
+                      res.val.ref = data;
+                    }
+                    break;
+                  
+                  default:
+                    res.type = PERL_UNDEF;
+                    break;
+                  }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:
@@ -354,10 +614,85 @@ namespace p6 {
       case PERL_INT:
         switch (b.type)
           {
-          // Int + Int
+          // int + int
           case PERL_INT:
             res.type = PERL_INT;
             res.val.i64 = a.val.i64 - b.val.i64;
+            break;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              // int + Int
+              case PERL_BIGINT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (a.val.i64);
+                  data->val.bint->sub (*b.val.ref->val.bint);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
+            break;
+          
+          default:
+            res.type = PERL_UNDEF;
+            break;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              // Int + int
+              case PERL_INT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (*a.val.ref->val.bint);
+                  data->val.bint->sub (b.val.i64);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  // Int + Int
+                  case PERL_BIGINT:
+                    {
+                      p_value *data = vm.get_gc ().alloc (true);
+                      data->type = PERL_BIGINT;
+                      data->val.bint = new big_int (*a.val.ref->val.bint);
+                      data->val.bint->sub (*b.val.ref->val.bint);
+                      
+                      res.type = PERL_REF;
+                      res.val.ref = data;
+                    }
+                    break;
+                  
+                  default:
+                    res.type = PERL_UNDEF;
+                    break;
+                  }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:
@@ -384,10 +719,61 @@ namespace p6 {
       case PERL_INT:
         switch (b.type)
           {
-          // Int + Int
+          // int + int
           case PERL_INT:
             res.type = PERL_INT;
             res.val.i64 = a.val.i64 * b.val.i64;
+            break;
+          
+          default:
+            res.type = PERL_UNDEF;
+            break;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              case PERL_INT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (*a.val.ref->val.bint);
+                  data->val.bint->mul (b.val.i64);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    {
+                      p_value *data = vm.get_gc ().alloc (true);
+                      data->type = PERL_BIGINT;
+                      data->val.bint = new big_int (*a.val.ref->val.bint);
+                      data->val.bint->mul (*b.val.ref->val.bint);
+                      
+                      res.type = PERL_REF;
+                      res.val.ref = data;
+                    }
+                    break;
+                  
+                  default:
+                    res.type = PERL_UNDEF;
+                    break;
+                  }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:
@@ -491,6 +877,7 @@ namespace p6 {
   }
   
   
+  
   static long long
   _to_int (p_value& val)
   {
@@ -540,48 +927,50 @@ namespace p6 {
   
   
   
-  static p_value
-  _concat_append_to_dstr (p_value& dest, p_value& val, virtual_machine& vm)
+  p_value
+  p_value_to_big_int (p_value& val, virtual_machine& vm)
   {
-    auto& data = dest.val.ref->val.str;
+    p_value *data = nullptr;
     switch (val.type)
       {
+      case PERL_INT:
+        data = vm.get_gc ().alloc (true);
+        data->type = PERL_BIGINT;
+        data->val.bint = new big_int (val.val.i64);
+        break;
+      
+      case PERL_REF:
+        switch (val.val.ref->type)
+          {
+          case PERL_BIGINT:
+            return val;
+          
+          default:
+            data = vm.get_gc ().alloc (true);
+            data->type = PERL_BIGINT;
+            data->val.bint = new big_int ();
+            break;
+          }
+        break;
+      
       default:
-        {
-          std::string str = p_value_str (val);
-          
-          if (data.len + str.length () > data.cap)
-            {
-              // resize
-              
-              unsigned int ncap = data.cap * 2;
-              if (ncap + str.length () > data.cap)
-                ncap += str.length ();
-              char *arr = new char [ncap];
-              std::strcpy (arr, data.data);
-              
-              delete[] data.data;
-              data.data = arr;
-              
-              vm.get_gc ().notify_increase (ncap - data.cap);
-              data.cap = ncap;
-            }
-          
-          std::memcpy (data.data + data.len, str.c_str (), str.length () + 1);
-          data.len += str.length ();
-        }
+        data = vm.get_gc ().alloc (true);
+        data->type = PERL_BIGINT;
+        data->val.bint = new big_int ();
         break;
       }
     
-    return dest;
+    p_value res;
+    res.type = PERL_REF;
+    res.val.ref = data;
+    return res;
   }
+  
+  
   
   p_value
   p_value_concat (p_value& a, p_value& b, virtual_machine& vm)
   {
-    if (a.type == PERL_REF && a.val.ref && a.val.ref->type == PERL_DSTR)
-      return _concat_append_to_dstr (a, b, vm);
-    
     std::string str;
     str.append (p_value_str (a));
     str.append (p_value_str (b));
