@@ -450,5 +450,23 @@ namespace arane {
   {
     delete this->param;
   }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_conditional::ast_conditional (ast_expr *test, ast_expr *conseq, ast_expr *alt)
+  {
+    this->test = test;
+    this->conseq = conseq;
+    this->alt = alt;
+  }
+  
+  ast_conditional::~ast_conditional ()
+  {
+    delete this->test;
+    delete this->conseq;
+    delete this->alt;
+  }
 }
 

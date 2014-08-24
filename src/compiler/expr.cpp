@@ -60,20 +60,20 @@ namespace arane {
           {
             // subroutine parameter
             this->cgen->emit_arg_load (var->index);
+            switch (var->type)
+              {
+              case VT_INT_NATIVE:
+                this->cgen->emit_to_int ();
+                break;
+              case VT_INT:
+                this->cgen->emit_to_bint ();
+                break;
+              
+              default: ;
+              }
           }
         else
           {
-            // try special variable names
-            if (name == "_")
-              {
-                if (ast->get_ident_type () == AST_IDENT_ARRAY)
-                  {
-                    // default array
-                    this->cgen->emit_load_arg_array ();
-                    return;
-                  }
-              }
-            
             // global variable
             this->cgen->emit_load_global (this->insert_string (name));
           }
@@ -177,42 +177,105 @@ namespace arane {
   
   
   
-  void
-  compiler::compile_unop_my (ast_named_unop *ast)
+  static void
+  _declare_var (error_tracker& errs, code_generator *cgen, frame& frm,
+    ast_expr *expr, variable_type type = VT_NONE)
   {
-    ast_expr *param = ast->get_param ();
-    if (param->get_type () == AST_IDENT)
+    if (expr->get_type () == AST_IDENT)
       {
-        frame& frm = this->top_frame ();
-        
-        auto ident = static_cast<ast_ident *> (param);
+        auto ident = static_cast<ast_ident *> (expr);
         const std::string& name = ident->get_name ();
         if (name.find (':') != std::string::npos)
           {
-            this->errs.error (ES_COMPILER,
+            errs.error (ES_COMPILER,
               "invalid local variable name `" + ident->get_decorated_name () + "'",
-              ast->get_line (), ast->get_column ());
+              ident->get_line (), ident->get_column ());
             return;
           }
         
         variable *var = frm.get_local (name);
         if (!var)
           {
-            frm.add_local (name);
+            frm.add_local (name, type);
             var = frm.get_local (name);
           }
         
         if (ident->get_ident_type () == AST_IDENT_ARRAY)
-          this->cgen->emit_alloc_array (0); // allocate empty array
+          cgen->emit_alloc_array (0); // allocate empty array
         else
-          this->cgen->emit_push_undef ();
+          cgen->emit_push_undef ();
         
-        this->cgen->emit_storeload (var->index);
+        cgen->emit_storeload (var->index);
+      }
+    else
+      {
+        errs.error (ES_COMPILER, "invalid expression type", expr->get_line (),
+          expr->get_column ());
+        return;
+      }
+  }
+  
+  void
+  compiler::compile_unop_my (ast_named_unop *ast)
+  {
+    ast_expr *param = ast->get_param ();
+    if (param->get_type () == AST_IDENT)
+      {
+        _declare_var (this->errs, this->cgen, this->top_frame (),
+          static_cast<ast_ident *> (param));
       }
     else if (param->get_type () == AST_LIST)
       {
-        // TODO
+        ast_list *lst = static_cast<ast_list *> (param);
+        for (ast_expr *expr : lst->get_elems ())
+          {
+            if (expr->get_type () != AST_IDENT)
+              {
+                this->errs.error (ES_COMPILER, "list can only contain identifiers",
+                  expr->get_line (), expr->get_column ());
+                return;
+              }
+            
+            _declare_var (this->errs, this->cgen, this->top_frame (), expr);
+            this->cgen->emit_pop ();
+          }
+        
         this->cgen->emit_push_undef ();
+      }
+    else if (param->get_type () == AST_TYPENAME)
+      {
+        ast_typename *tn = static_cast<ast_typename *> (param);
+        if (tn->get_param ()->get_type () == AST_IDENT)
+          {
+            _declare_var (this->errs, this->cgen, this->top_frame (),
+              static_cast<ast_ident *> (tn->get_param ()),
+              tn_type_to_var_type (tn->get_op ()));
+          }
+        else if (tn->get_param ()->get_type () == AST_LIST)
+          {
+            ast_list *lst = static_cast<ast_list *> (tn->get_param ());
+            for (ast_expr *expr : lst->get_elems ())
+              {
+                if (expr->get_type () != AST_IDENT)
+                  {
+                    this->errs.error (ES_COMPILER, "list can only contain identifiers",
+                      expr->get_line (), expr->get_column ());
+                    return;
+                  }
+                
+                _declare_var (this->errs, this->cgen, this->top_frame (), expr,
+                  tn_type_to_var_type (tn->get_op ()));
+                this->cgen->emit_pop ();
+              }
+            
+            this->cgen->emit_push_undef ();
+          }
+        else
+          {
+            errs.error (ES_COMPILER, "expected identifier or list after type name",
+              tn->get_param ()->get_line (), tn->get_param ()->get_column ());
+            return;
+          }
       }
   }
   
@@ -406,14 +469,38 @@ namespace arane {
   void
   compiler::compile_range (ast_range *ast)
   {
-    // push parameters
-    this->compile_expr (ast->get_lhs ());
-    this->compile_expr (ast->get_rhs ());
-    this->cgen->emit_push_int (ast->lhs_exclusive () ? 1 : 0);
+    // push parameters (in reverse order)
     this->cgen->emit_push_int (ast->rhs_exclusive () ? 1 : 0);
-    this->cgen->emit_box_array (4);
+    this->cgen->emit_push_int (ast->lhs_exclusive () ? 1 : 0);
+    this->compile_expr (ast->get_rhs ());
+    this->compile_expr (ast->get_lhs ());
     
     this->cgen->emit_call_builtin ("range", 4);
+  }
+  
+  
+  
+  void
+  compiler::compile_conditional (ast_conditional *ast)
+  {
+    int lbl_mpart_false = this->cgen->create_label ();
+    int lbl_done = this->cgen->create_label ();
+    
+    // test
+    this->compile_expr (ast->get_test ());
+    this->cgen->emit_is_false ();
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_je (lbl_mpart_false);
+    
+    // consequent
+    this->compile_expr (ast->get_conseq ());
+    this->cgen->emit_jmp (lbl_done);
+    
+    // alternative
+    this->cgen->mark_label (lbl_mpart_false);
+    this->compile_expr (ast->get_alt ());
+    
+    this->cgen->mark_label (lbl_done);
   }
   
   
@@ -477,6 +564,10 @@ namespace arane {
       
       case AST_RANGE:
         this->compile_range (static_cast<ast_range *> (ast));
+        break;
+      
+      case AST_CONDITIONAL:
+        this->compile_conditional (static_cast<ast_conditional *> (ast));
         break;
         
       default:

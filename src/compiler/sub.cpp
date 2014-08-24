@@ -328,18 +328,6 @@ namespace arane {
   
   
   
-  /* 
-   * Must be handled as a special function since arrays are flattened out when
-   * passed to a subroutine.
-   */
-  void
-  compiler::compile_sub_push (ast_sub_call *ast)
-  {
-    
-  }
-  
-  
-  
   void
   compiler::compile_sub_checkpoint (ast_sub_call *ast)
   {
@@ -359,7 +347,9 @@ namespace arane {
   _is_builtin (const std::string& name)
   {
     static const std::unordered_set<std::string> _set {
-      "print", "elems", "substr", "length", "shift",
+      "print", "say",
+      
+      "elems", "push", "pop", "shift",
     };
     
     auto itr = _set.find (name);
@@ -375,18 +365,21 @@ namespace arane {
       void (compiler::*)(ast_sub_call *)> _ssub_map {
       { "last", &compiler::compile_sub_last },
       { "next", &compiler::compile_sub_next },
-      { "push", &compiler::compile_sub_push },
     };
     
-    // DEBUG
     if (name == "checkpoint")
       {
         this->compile_sub_checkpoint (ast);
         return;
       }
     
-    // parameters
-    this->compile_list (ast->get_params ());
+    // parameters (push in reverse order)
+    auto& params = ast->get_params ()->get_elems ();
+    for (auto itr = params.rbegin (); itr != params.rend (); ++itr)
+      {
+        auto param = *itr;
+        this->compile_expr (param);
+      }
     
     auto itr = _ssub_map.find (name);
     if (itr != _ssub_map.end ())
@@ -397,7 +390,7 @@ namespace arane {
     else if (_is_builtin (name))
       {
         // builtin
-        this->cgen->emit_call_builtin (name, ast->get_params ()->get_elems ().size ());
+        this->cgen->emit_call_builtin (name, params.size ());
       }
     else
       {
@@ -432,7 +425,7 @@ namespace arane {
             });
             
             auto& sub = this->packs.front ()->get_sub (abs_path);
-            this->cgen->emit_call (sub.lbl);
+            this->cgen->emit_call (sub.lbl, params.size ());
           }
         else
           {
@@ -443,7 +436,7 @@ namespace arane {
             });
             
             // if it's an import, it will be replaced by the linker.
-            this->cgen->emit_call (0);
+            this->cgen->emit_call (0, params.size ());
           }
       }
   }
@@ -535,9 +528,24 @@ namespace arane {
       }
     
     // compile the body
-    for (ast_stmt *stmt : body->get_stmts ())
+    auto& stmts = body->get_stmts ();
+    for (unsigned int i = 0; i < stmts.size (); ++i)
       {
-        this->compile_stmt (stmt);
+        auto stmt = stmts[i];
+        if (i != stmts.size () - 1)
+          this->compile_stmt (stmt);
+        else
+          {
+            // last statement
+            if (stmt->get_type () == AST_EXPR_STMT)
+              {
+                auto expr = (static_cast<ast_expr_stmt *> (stmt))->get_expr ();
+                this->compile_expr (expr);
+                this->cgen->emit_return ();
+              }
+            else
+              this->compile_stmt (stmt);
+          }
       }
     
     // add an implicit return statement

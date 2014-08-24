@@ -621,6 +621,24 @@ namespace arane {
           return expr;
         }
       
+      case TOK_SUB:
+        {
+          // negative integer
+          toks.next ();
+          tok = toks.next ();
+          if (tok.typ != TOK_INTEGER)
+            {
+              ps.errs.error (ES_PARSER, "expected integer after unary '-'",
+                tok.ln, tok.col);
+              return nullptr;
+            }
+          
+          auto expr = new ast_integer (-(long long)tok.val.i64);
+          expr->set_pos (tok.ln, tok.col);
+          return expr;
+        }
+        break;
+      
       case TOK_UNDEF:
         toks.next ();
         return new ast_undef ();
@@ -1001,6 +1019,33 @@ namespace arane {
   }
   
   
+  
+  static ast_conditional*
+  _parse_conditional (ast_expr *left, parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    toks.next (); // skip ??
+    
+    std::unique_ptr<ast_expr> conseq { _parse_expr (ps) };
+    if (!conseq.get ())
+      return nullptr;
+    
+    token tok = toks.next ();
+    if (tok.typ != TOK_DEXC)
+      {
+        ps.errs.error (ES_PARSER, "expected '!!' in conditional expression",
+          tok.ln, tok.col);
+        return nullptr;
+      }
+    
+    std::unique_ptr<ast_expr> alt { _parse_expr (ps) };
+    if (!alt.get ())
+      return nullptr;
+    
+    return new ast_conditional (left, conseq.release (), alt.release ());
+  }
+  
+  
   static ast_expr*
   _parse_expr_rest (ast_expr *left, parser_state& ps)
   {
@@ -1017,6 +1062,8 @@ namespace arane {
             return _parse_list_no_parens (left, ps);
           }
       }
+    else if (tok.typ == TOK_DQ)
+      return _parse_conditional (left, ps);
     
     return left;
   }

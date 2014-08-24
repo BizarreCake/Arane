@@ -202,11 +202,10 @@ namespace arane {
     this->compile_sub (sub);
     
     auto& inf = *this->find_sub ("#PROGRAM");
-    this->cgen->emit_alloc_array (0); // empty param array
-    this->cgen->emit_call (inf.lbl);
+    this->cgen->emit_call (inf.lbl, 0);
     this->mod->add_reloc ({
       .type = REL_CODE,
-      .pos  = this->cgen->get_buffer ().get_pos () - 4,
+      .pos  = this->cgen->get_buffer ().get_pos () - 5,
       .dest = (unsigned int)this->cgen->get_label_pos (inf.lbl),
       .size = 4,
     });

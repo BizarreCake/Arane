@@ -125,6 +125,7 @@ namespace arane {
     void emit_array_set ();
     void emit_array_get ();
     void emit_box_array (unsigned char count);
+    void emit_flatten ();
     
     void emit_to_str ();
     void emit_to_int ();
@@ -138,12 +139,11 @@ namespace arane {
     void emit_load_ref (unsigned int index);
     
     void emit_call_builtin (const std::string& name, unsigned char param_count);
-    void emit_call (int lbl);
+    void emit_call (int lbl, unsigned char param_count);
     void emit_return ();
     void emit_arg_load (unsigned char index);
     void emit_arg_store (unsigned char index);
     void emit_arg_load_ref (unsigned char index);
-    void emit_load_arg_array ();
     
     void emit_exit ();
     void emit_checkpoint (int n);

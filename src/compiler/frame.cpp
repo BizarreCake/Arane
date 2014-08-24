@@ -21,6 +21,21 @@
 
 namespace arane {
   
+  variable_type
+  tn_type_to_var_type (ast_typename_type type)
+  {
+    switch (type)
+      {
+      case AST_TN_INT_NATIVE:     return VT_INT_NATIVE;
+      case AST_TN_INT:            return VT_INT;
+      
+      default:
+        return VT_NONE;
+      }
+  }
+  
+  
+  
   frame::frame (frame_type type, frame *parent)
   {
     this->type = type;

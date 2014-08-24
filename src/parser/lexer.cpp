@@ -375,12 +375,28 @@ namespace arane {
           tok.typ = TOK_GT;
         return true;
       
+      case '?':
+        c = strm.peek ();
+        if (c == '?')
+          {
+            strm.get ();
+            tok.typ = TOK_DQ;
+            return true;
+          }
+        strm.unget ();
+        return false;
+      
       case '!':
         c = strm.peek ();
         if (c == '=')
           {
             strm.get ();
             tok.typ = TOK_NE;
+          }
+        else if (c == '!')
+          {
+            strm.get ();
+            tok.typ = TOK_DEXC;
           }
         else
           tok.typ = TOK_NOT;

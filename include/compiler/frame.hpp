@@ -19,6 +19,7 @@
 #ifndef _ARANE__COMPILER__FRAME__H_
 #define _ARANE__COMPILER__FRAME__H_
 
+#include "parser/ast.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -32,6 +33,9 @@ namespace arane {
     VT_INT_NATIVE,
     VT_INT,
   };
+  
+  variable_type tn_type_to_var_type (ast_typename_type type);
+  
   
   struct variable
   {

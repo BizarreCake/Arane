@@ -230,8 +230,16 @@ namespace arane {
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) == 0);
               
-              case PERL_BIGINT:
-                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) == 0);
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) == 0);
+                  
+                  default:
+                    return false;
+                  }
+                break;
               
               default:
                 return false;
@@ -287,8 +295,16 @@ namespace arane {
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) < 0);
               
-              case PERL_BIGINT:
-                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) < 0);
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) < 0);
+                  
+                  default:
+                    return false;
+                  }
+                break;
               
               default:
                 return false;
@@ -344,8 +360,16 @@ namespace arane {
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) <= 0);
               
-              case PERL_BIGINT:
-                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) <= 0);
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) <= 0);
+                  
+                  default:
+                    return false;
+                  }
+                break;
               
               default:
                 return false;
@@ -401,8 +425,16 @@ namespace arane {
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) > 0);
               
-              case PERL_BIGINT:
-                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) > 0);
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) > 0);
+                  
+                  default:
+                    return false;
+                  }
+                break;
               
               default:
                 return false;
@@ -458,8 +490,16 @@ namespace arane {
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) >= 0);
               
-              case PERL_BIGINT:
-                return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) >= 0);
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  case PERL_BIGINT:
+                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) >= 0);
+                  
+                  default:
+                    return false;
+                  }
+                break;
               
               default:
                 return false;
@@ -723,6 +763,28 @@ namespace arane {
           case PERL_INT:
             res.type = PERL_INT;
             res.val.i64 = a.val.i64 * b.val.i64;
+            break;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              // int + Int
+              case PERL_BIGINT:
+                {
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  data->val.bint = new big_int (a.val.i64);
+                  data->val.bint->mul (*b.val.ref->val.bint);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:

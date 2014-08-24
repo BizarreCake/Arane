@@ -363,6 +363,12 @@ namespace arane {
     this->buf.put_byte (count); 
   }
   
+  void
+  code_generator::emit_flatten ()
+  {
+    this->buf.put_byte (0x34);
+  }
+  
   
   
   void
@@ -465,6 +471,16 @@ namespace arane {
     unsigned char param_count)
   {
     static const std::unordered_map<std::string, int> _index_map {
+      { "print", 0x100 },
+      { "say", 0x101 },
+      
+      { "elems", 0x200 },
+      { "push", 0x201 },
+      { "pop", 0x202 },
+      { "shift", 0x203 },
+      { "range", 0x204 },
+      
+      /*
       { "print", 1 },
       { "push", 2 },
       { "elems", 3 },
@@ -472,6 +488,7 @@ namespace arane {
       { "substr", 5 },
       { "length", 6 },
       { "shift", 7 },
+      */
     };
     
     auto itr = _index_map.find (name);
@@ -484,7 +501,7 @@ namespace arane {
   }
   
   void
-  code_generator::emit_call (int lbl)
+  code_generator::emit_call (int lbl, unsigned char param_count)
   {
     this->buf.put_byte (0x71);
     
@@ -495,6 +512,7 @@ namespace arane {
       .size = 4,
     });
     this->buf.put_int (0);
+    this->buf.put_byte (param_count);
   }
   
   void
@@ -522,12 +540,6 @@ namespace arane {
   {
     this->buf.put_byte (0x75);
     this->buf.put_byte (index);
-  }
-  
-  void
-  code_generator::emit_load_arg_array ()
-  {
-    this->buf.put_byte (0x76);
   }
   
   

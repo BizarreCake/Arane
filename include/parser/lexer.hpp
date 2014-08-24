@@ -84,6 +84,8 @@ namespace arane {
     TOK_AT,                   // @
     TOK_LARROW,               // ->
     TOK_CARET,                // ^
+    TOK_DQ,                   // ??
+    TOK_DEXC,                 // !!
     
     // operators:
     TOK_ASSIGN,               // =

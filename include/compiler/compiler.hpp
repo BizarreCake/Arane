@@ -170,6 +170,8 @@ namespace arane {
     
     void compile_range (ast_range *ast);
     
+    void compile_conditional (ast_conditional *ast);
+    
     
     void compile_assign (ast_expr *lhs, ast_expr *rhs);
     void assign_to_ident (ast_ident *lhs, ast_expr *rhs);
@@ -182,7 +184,6 @@ namespace arane {
     // special subroutines:
     void compile_sub_last (ast_sub_call *ast);
     void compile_sub_next (ast_sub_call *ast);
-    void compile_sub_push (ast_sub_call *ast);
     void compile_sub_checkpoint (ast_sub_call *ast);
   };
 }

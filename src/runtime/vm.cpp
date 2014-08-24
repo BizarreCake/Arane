@@ -18,6 +18,7 @@
 
 #include "runtime/vm.hpp"
 #include "runtime/gc.hpp"
+#include "runtime/builtins.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
@@ -62,300 +63,6 @@ namespace arane {
   
   
   
-  /* 
-   * Builtin subroutines:
-   */
-//------------------------------------------------------------------------------
-  
-  p_value&
-  virtual_machine::get_param_array ()
-  {
-    auto params = &stack[sp - 1];
-    while (params->type == PERL_REF && params->val.ref)
-      params = params->val.ref;
-    if (params->type != PERL_ARRAY)
-      throw std::runtime_error ("parameter array not passed as an array");
-    return *params;
-  }
-  
-  
-  
-  void
-  virtual_machine::builtin_print (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    for (int i = 0; i < param_count; ++i)
-      {
-        p_value& val = params.val.arr.data[i];
-        *this->out << p_value_str (val);
-      }
-    
-    -- sp;
-    stack[sp].type = PERL_INT;
-    stack[sp].val.i64 = 1;
-    ++ sp;
-  }
-  
-  void
-  virtual_machine::builtin_push (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    if (param_count < 2)
-      {
-        std::cout << "builtin `push' expects at least 2 parameters" << std::endl;
-        return;
-      }
-    
-    p_value *arr = &params.val.arr.data[0];
-    while (arr && arr->type == PERL_REF)
-      arr = arr->val.ref;
-    if (!arr)
-      return;
-    if (arr->type != PERL_ARRAY)
-      {
-        std::cout << "first parameter passed to builtin `push' is not an array" << std::endl;
-        return;
-      }
-    
-    // make sure there's enough space
-    auto& data = arr->val.arr;
-    if ((data.len + (param_count - 1)) > data.cap)
-      {
-        // resize
-        
-        unsigned int ncap = data.cap + param_count - 1;
-        p_value *narr = new p_value [ncap];
-        for (unsigned int i = 0; i < data.len; ++i)
-          narr[i] = data.data[i];
-        
-        data.cap = ncap;
-        delete[] data.data;
-        data.data = narr;
-      }
-    
-    for (int i = 1; i < param_count; ++i)
-      data.data[data.len++] = params.val.arr.data[i];
-    
-    stack[sp - 1].type = PERL_UNDEF;
-  }
-  
-  void
-  virtual_machine::builtin_elems (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    -- sp;
-    stack[sp].type = PERL_INT;
-    stack[sp].val.i64 = param_count;
-    ++ sp;
-  }
-  
-  void
-  virtual_machine::builtin_range (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    if (param_count != 4)
-      {
-        std::cout << "builtin `range' expects 4 parameters" << std::endl;
-        return;
-      }
-    
-    auto& lhs = params.val.arr.data[0];
-    auto& rhs = params.val.arr.data[1];
-    auto& s_lhs_exc = params.val.arr.data[2];
-    auto& s_rhs_exc = params.val.arr.data[3];
-    
-    if (s_lhs_exc.type != PERL_INT || s_rhs_exc.type != PERL_INT ||
-        lhs.type != PERL_INT || rhs.type != PERL_INT)
-      {
-        std::cout << "invalid parameters passed to builtin `range'" << std::endl;
-        return;
-      }
-    
-    bool lhs_exc = (s_lhs_exc.val.i64 == 1);
-    bool rhs_exc = (s_rhs_exc.val.i64 == 1);
-    long long start = lhs.val.i64;
-    long long end = rhs.val.i64;
-    
-    if (lhs_exc)
-      ++ start;
-    if (rhs_exc)
-      -- end;
-    
-    int count = end - start + 1;
-    if (count < 0)
-      count = 0;
-    int cap = count ? count : 1;
-    
-    p_value *data = this->gc.alloc (true);
-    data->type = PERL_ARRAY;
-    data->val.arr.len = count;
-    data->val.arr.cap = cap;
-    data->val.arr.data = new p_value [cap];
-    for (int i = 0; i < count; ++i)
-      {
-        p_value &ch = data->val.arr.data[i];
-        ch.type = PERL_INT;
-        ch.val.i64 = start + i;
-      }
-    
-    p_value& val = stack[sp - 1];
-    val.type = PERL_REF;
-    val.val.ref = data;
-    p_value_unprotect (data);
-  }
-  
-  void
-  virtual_machine::builtin_substr (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    if (param_count < 2)
-      {
-        std::cout << "builtin `substr' expects at least 2 parameters" << std::endl;
-        return;
-      }
-    
-    // string
-    auto str = &params.val.arr.data[0];
-    long long str_len = 0;
-    if (str->type == PERL_CSTR)
-      str_len = str->val.cstr.len;
-    else if (str->type == PERL_REF)
-      {
-        if (str->val.ref->type != PERL_DSTR)
-          {
-            std::cout << "first parameter to builtin `substr' must be a string" << std::endl;
-            return;
-          }
-        
-        str = str->val.ref;
-        str_len = str->val.str.len;
-      }
-    
-    // offset
-    if (params.val.arr.data[1].type != PERL_INT)
-      {
-        std::cout << "second parameter (offset) to builtin `substr' must be an integer" << std::endl;
-        return;
-      }
-    long long off = params.val.arr.data[1].val.i64;
-    
-    // length
-    int len = str_len - off;
-    if (param_count > 2)
-      {
-        if (params.val.arr.data[2].type != PERL_INT)
-          {
-            std::cout << "third parameter (length) to builtin `substr' must be an integer" << std::endl;
-            return;
-          }
-        
-        len = params.val.arr.data[2].val.i64;
-      }
-    if (len < 0 || off >= str_len)
-      len = 0;
-    if (off + len > str_len)
-      len = str_len - off;
-    
-    
-    unsigned int cap = len + 1;
-    p_value *data = this->gc.alloc (true);
-    data->type = PERL_DSTR;
-    data->val.str.data = new char [cap];
-    data->val.str.len = len;
-    data->val.str.cap = cap;
-    if (str->type == PERL_CSTR)
-      {
-        for (int i = 0; i < len; ++i)
-          data->val.str.data[i] = str->val.cstr.data[off + i];
-        data->val.str.data[len] = '\0';
-      }
-    else if (str->type == PERL_DSTR)
-      {
-        for (int i = 0; i < len; ++i)
-          data->val.str.data[i] = str->val.str.data[off + i];
-        data->val.str.data[len] = '\0';
-      }
-    
-    p_value res;
-    res.type = PERL_REF;
-    res.val.ref = data;
-    
-    stack[sp - 1] = res;
-    p_value_unprotect (data);
-    this->gc.notify_increase (cap);
-  }
-  
-  void
-  virtual_machine::builtin_length (unsigned char ac_params)
-  {
-    auto& params = this->get_param_array ();
-    int param_count = params.val.arr.len;
-    
-    if (param_count != 1)
-      {
-        std::cout << "builtin `length' expects 1 parameter" << std::endl;
-        return;
-      }
-    
-    auto str = &params.val.arr.data[0];
-    long long str_len = 0;
-    if (str->type == PERL_CSTR)
-      str_len = str->val.cstr.len;
-    else if (str->type == PERL_REF)
-      {
-        if (str->val.ref->type != PERL_DSTR)
-          {
-            std::cout << "parameter passed to builtin `length' must be a string" << std::endl;
-            return;
-          }
-        
-        str = str->val.ref;
-        str_len = str->val.str.len;
-      }
-    
-    -- sp;
-    stack[sp].type = PERL_INT;
-    stack[sp].val.i64 = str_len;
-    ++ sp;
-  }
-  
-  void
-  virtual_machine::builtin_shift (unsigned char ac_params)
-  {
-    auto arr = (ac_params == 0)
-      ? stack[bp - 2].val.ref    // default array
-      : &this->get_param_array ();
-    int arr_len = arr->val.arr.len;
-    
-    if (arr_len == 0)
-      {
-        // array empty, push undef
-        stack[sp - 1].type = PERL_UNDEF;
-      }
-    else
-      {
-        auto& data = arr->val.arr;
-        stack[sp - 1] = data.data[0];
-        
-        // shift elements
-        for (int i = 1; i < arr_len; ++i)
-          data.data[i - 1] = data.data[i];
-        -- data.len;
-      }
-  }
-  
-//------------------------------------------------------------------------------
-  
   static inline void
   _unprotect_external (p_value& val)
   {
@@ -363,6 +70,25 @@ namespace arane {
       {
         if (val.val.ref)
           p_value_unprotect (val.val.ref);
+      }
+  }
+  
+  static void
+  _flatten (p_value *stack, int& sp)
+  {
+    auto& arrv = stack[sp - 1];
+    if (arrv.type == PERL_REF &&
+        arrv.val.ref &&
+        arrv.val.ref->type == PERL_ARRAY)
+      {
+        auto& data = arrv.val.ref->val.arr;
+        
+        -- sp;
+        for (unsigned int i = 0; i < data.len; ++i)
+          {
+            stack[sp++] = data.data[i];
+            _flatten (stack, sp);
+          }
       }
   }
   
@@ -401,7 +127,7 @@ namespace arane {
           case 0x00:
             CHECK_STACK_SPACE(1)
             stack[sp].type = PERL_INT;
-            stack[sp].val.i64 = *ptr++;
+            stack[sp].val.i64 = (char)*ptr++;
             ++ sp;
             break;
           
@@ -813,6 +539,11 @@ namespace arane {
             }
             break;
           
+          // flatten
+          case 0x34:
+            _flatten (stack, sp);
+            break;
+          
 //------------------------------------------------------------------------------
          
          /*  
@@ -947,6 +678,7 @@ namespace arane {
             CHECK_STACK_SPACE(1)
             stack[sp].type = PERL_REF;
             stack[sp].val.ref = &stack[bp + 1 + *ptr++];
+            stack[sp].val.ref->is_gc = false;
             ++ sp;
             break;
           
@@ -956,6 +688,7 @@ namespace arane {
             {
               stack[sp].type = PERL_REF;
               stack[sp].val.ref = &stack[bp + 1 + *((unsigned int *)ptr)];
+              stack[sp].val.ref->is_gc = false;
               ++ sp;
               ptr += 4;
             }
@@ -978,13 +711,14 @@ namespace arane {
               
               switch (index)
                 {
-                case 1: this->builtin_print (param_count); break;
-                case 2: this->builtin_push (param_count); break;
-                case 3: this->builtin_elems (param_count); break;
-                case 4: this->builtin_range (param_count); break;
-                case 5: this->builtin_substr (param_count); break;
-                case 6: this->builtin_length (param_count); break;
-                case 7: this->builtin_shift (param_count); break;
+                case 0x100: builtins::print (*this, param_count); break; 
+                case 0x101: builtins::say (*this, param_count); break;
+                
+                case 0x200: builtins::elems (*this, param_count); break; 
+                case 0x201: builtins::push (*this, param_count); break;
+                case 0x202: builtins::pop (*this, param_count); break;
+                case 0x203: builtins::shift (*this, param_count); break;
+                case 0x204: builtins::range (*this, param_count); break;
                 }
             }
             break;
@@ -995,9 +729,16 @@ namespace arane {
               unsigned int pos = *((unsigned int *)ptr);
               ptr += 4;
               
+              unsigned char paramc = *ptr++;
+              
               // push return address
               stack[sp].type = PERL_INTERNAL;
               stack[sp].val.i64 = ptr - code;
+              ++ sp;
+              
+              // parameter count
+              stack[sp].type = PERL_INTERNAL;
+              stack[sp].val.i64 = paramc;
               ++ sp;
               
               ptr = code + pos;
@@ -1007,11 +748,13 @@ namespace arane {
           // return
           case 0x72:
             {
-              ptr = code + stack[bp - 1].val.i64;
+              ptr = code + stack[bp - 2].val.i64;
+              
+              unsigned char paramc = stack[bp - 1].val.i64;
               
               int ret_index = sp - 1;
               int pbp = stack[bp].val.i64;
-              sp = bp - 2;
+              sp = bp - 2 - paramc;
               bp = pbp;
               
               stack[sp++] = stack[ret_index];
@@ -1021,41 +764,21 @@ namespace arane {
           // arg_load
           case 0x73:
             CHECK_STACK_SPACE(1)
-            {
-              auto arr = stack[bp - 2].val.ref;
-              stack[sp++] = arr->val.arr.data[*ptr++];
-            }
+            stack[sp++] = stack[bp - 3 - *ptr++];
             break;
           
           // arg_store
           case 0x74:
-            {
-              auto arr = stack[bp - 2].val.ref;
-              arr->val.arr.data[*ptr++] = stack[--sp];
-            }
+            stack[bp - 3 - *ptr++] = stack[--sp];
             break;
             
           // arg_load_ref - load reference to an argument
           case 0x75:
             CHECK_STACK_SPACE(1)
-            {
-              auto arr = stack[bp - 2].val.ref;
-              
-              stack[sp].type = PERL_REF;
-              stack[sp].val.ref = &arr->val.arr.data[*ptr++];
-              ++ sp;
-            }
-            break;
-          
-          // load_arg_array
-          case 0x76:
-            CHECK_STACK_SPACE(1)
-            stack[sp++] = stack[bp - 2];
-            break;
-          
-          // tail_call
-          case 0x77:
-            // TODO
+            stack[sp].type = PERL_REF;
+            stack[sp].val.ref = &stack[bp - 3 - *ptr++];
+            stack[sp].val.ref->is_gc = false;
+            ++ sp;
             break;
                     
 //------------------------------------------------------------------------------
@@ -1084,7 +807,6 @@ namespace arane {
       }
   
   done: ;
-    //this->gc.collect ();
   }
 }
 

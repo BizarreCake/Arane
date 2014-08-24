@@ -55,6 +55,7 @@ namespace arane {
     AST_PACKAGE,
     AST_USE,
     AST_TYPENAME,
+    AST_CONDITIONAL,
   };
   
   
@@ -721,6 +722,29 @@ namespace arane {
     
   public:
     ast_use (const std::string& what);
+  };
+  
+  
+  
+  /* 
+   * <expr> ?? <expr> !! <expr>;
+   */
+  class ast_conditional: public ast_expr
+  {
+    ast_expr *test;
+    ast_expr *conseq;
+    ast_expr *alt;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_CONDITIONAL; }
+    
+    inline ast_expr *get_test () { return this->test; }
+    inline ast_expr *get_conseq () { return this->conseq; }
+    inline ast_expr *get_alt () { return this->alt; }
+    
+  public:
+    ast_conditional (ast_expr *test, ast_expr *conseq, ast_expr *alt);
+    ~ast_conditional ();
   };
 }
 
