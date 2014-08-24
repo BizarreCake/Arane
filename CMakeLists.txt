@@ -1,8 +1,8 @@
 # 
-# P6's CMakeLists file.
+# Arane's CMakeLists file.
 # 
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 PROJECT(Arane)
 
 FILE(GLOB_RECURSE Arane_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
