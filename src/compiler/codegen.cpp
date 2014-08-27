@@ -19,6 +19,8 @@
 #include "compiler/codegen.hpp"
 #include <stdexcept>
 
+#include <iostream> // DEBUG
+
 
 namespace arane {
   
@@ -29,6 +31,16 @@ namespace arane {
     : buf (buf)
   {
     this->next_lbl_id = 0;
+  }
+  
+  code_generator::~code_generator ()
+  {
+    while (!this->phs.empty ())
+      {
+        auto& ph = this->phs.top ();
+        delete ph.rest;
+        this->phs.pop ();
+      }
   }
   
   
@@ -49,8 +61,21 @@ namespace arane {
   code_generator::mark_label (int lbl)
   {
     this->labels[lbl] = {
+      .type = LT_REGULAR,
       .pos = this->buf.get_pos (),
+      .ph_id = (int)this->phs.size (),
     };
+  }
+  
+  /* 
+   * Same as create_label () immediately followed by mark_label ().
+   */
+  int
+  code_generator::create_and_mark_label ()
+  {
+    int lbl = this->create_label ();
+    this->mark_label (lbl);
+    return lbl;
   }
   
   /* 
@@ -100,6 +125,107 @@ namespace arane {
   }
   
   
+  
+  /* 
+   * Creates and returns a special placeholder label.
+   */
+  int
+  code_generator::create_placeholder ()
+  {
+    int index = ++this->next_lbl_id;
+    this->labels[index] = {
+      .type = LT_PLACEHOLDER,
+      .pos = this->buf.get_pos (),
+    };
+    
+    this->buf.put_byte (0xFF);  // placeholder byte
+    return index;
+  }
+  
+  /* 
+   * Sets the current position to the specified label.
+   */
+  void
+  code_generator::move_to_label (int lbl)
+  {
+    auto itr = this->labels.find (lbl);
+    if (itr != this->labels.end ())
+      {
+        this->buf.set_pos (itr->second.pos);
+      }
+  }
+  
+  /* 
+   * Sets up space for the placeholder the code generator is currently in.
+   */
+  void
+  code_generator::placeholder_start ()
+  {
+    ph_info nph;
+    
+    // store the rest of the buffer after this point.
+    nph.rest = new byte_buffer ();
+    nph.rest->put_bytes (
+      this->buf.get_data () + (this->buf.get_pos () + 1), // skip placeholder byte
+      this->buf.get_size () - (this->buf.get_pos () + 1));
+    
+    nph.start = this->buf.get_pos ();
+    this->buf.resize (this->buf.get_pos ()); // shrink
+    
+    this->phs.push (nph);
+  }
+  
+  /* 
+   * Closes the current placeholder.
+   */
+  void
+  code_generator::placeholder_end ()
+  {
+    ph_info cph = this->phs.top ();
+    int ph_id = this->phs.size ();
+    
+    unsigned int count = this->buf.get_pos () - cph.start - 1;
+    
+    // update labels
+    for (auto itr = this->labels.begin (); itr != this->labels.end (); ++itr)
+      {
+        auto& lbl = itr->second;
+        if (lbl.ph_id != ph_id && lbl.pos > cph.start)
+          {
+            lbl.pos += count;
+          }
+        else if (lbl.ph_id == ph_id)
+          lbl.ph_id = 0;
+      }
+    for (auto& use : this->label_uses)
+      {
+        if (use.ph_id != ph_id && use.pos > cph.start)
+          {
+            use.pos += count;
+          }
+        else if (use.ph_id == ph_id)
+          use.ph_id = 0;
+      }
+    
+    // restore the remaining part
+    this->buf.put_bytes (cph.rest->get_data (), cph.rest->get_size ());
+    
+    this->phs.pop ();
+    delete cph.rest;
+  }
+  
+  
+  
+  void
+  code_generator::put_zeroes (unsigned int count)
+  {
+    while (count --> 0)
+      this->buf.put_byte (0);
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
   
   void
   code_generator::emit_push_int (long long val)
@@ -162,6 +288,18 @@ namespace arane {
     this->buf.put_int (pos);
   }
   
+  void
+  code_generator::emit_push_true ()
+  {
+    this->buf.put_byte (0x09);
+  }
+  
+  void
+  code_generator::emit_push_false ()
+  {
+    this->buf.put_byte (0x0A);
+  }
+  
   
   
   void
@@ -201,18 +339,6 @@ namespace arane {
   }
   
   void
-  code_generator::emit_is_false ()
-  {
-    this->buf.put_byte (0x16);
-  }
-  
-  void
-  code_generator::emit_is_true ()
-  {
-    this->buf.put_byte (0x17);
-  }
-  
-  void
   code_generator::emit_ref ()
   {
     this->buf.put_byte (0x18);
@@ -248,6 +374,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -262,6 +389,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -276,6 +404,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -290,6 +419,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -304,6 +434,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -318,6 +449,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -332,6 +464,37 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = false,
       .size = 2,
+      .ph_id = (int)this->phs.size (),
+    });
+    this->buf.put_short (0);
+  }
+  
+  void
+  code_generator::emit_jt (int lbl)
+  {
+    this->buf.put_byte (0x27);
+    
+    this->label_uses.push_back ({
+      .lbl = lbl,
+      .pos = this->buf.get_pos (),
+      .abs = false,
+      .size = 2,
+      .ph_id = (int)this->phs.size (),
+    });
+    this->buf.put_short (0);
+  }
+  
+  void
+  code_generator::emit_jf (int lbl)
+  {
+    this->buf.put_byte (0x28);
+    
+    this->label_uses.push_back ({
+      .lbl = lbl,
+      .pos = this->buf.get_pos (),
+      .abs = false,
+      .size = 2,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_short (0);
   }
@@ -387,6 +550,12 @@ namespace arane {
   code_generator::emit_to_bint ()
   {
     this->buf.put_byte (0x42);
+  }
+  
+  void
+  code_generator::emit_to_bool ()
+  {
+    this->buf.put_byte (0x43);
   }
   
   
@@ -510,6 +679,7 @@ namespace arane {
       .pos = this->buf.get_pos (),
       .abs = true,
       .size = 4,
+      .ph_id = (int)this->phs.size (),
     });
     this->buf.put_int (0);
     this->buf.put_byte (param_count);
@@ -540,6 +710,31 @@ namespace arane {
   {
     this->buf.put_byte (0x75);
     this->buf.put_byte (index);
+  }
+  
+  
+  
+  void
+  code_generator::emit_to_compatible (const type_info& ti)
+  {
+    for (const basic_type& bt : ti.types)
+      {
+        this->buf.put_byte (0x80);
+        switch (bt.type)
+          {
+          case TYPE_INT_NATIVE:     this->buf.put_byte (0); break;
+          case TYPE_INT:            this->buf.put_byte (1); break;
+          case TYPE_BOOL_NATIVE:    this->buf.put_byte (2); break;
+          case TYPE_STR:            this->buf.put_byte (3); break;
+          case TYPE_ARRAY:          this->buf.put_byte (4); break;
+          
+          default:
+            throw std::runtime_error ("codegen: unsupported type");
+          }
+      }
+    
+    this->buf.put_byte (0x81);
+    this->buf.put_byte (ti.types.size ());
   }
   
   

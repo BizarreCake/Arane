@@ -60,6 +60,15 @@ namespace arane {
   }
   
   
+  void
+  byte_buffer::resize (unsigned int nsize)
+  {
+    this->size = nsize;
+    if (this->size > this->cap)
+      this->expand (nsize);
+  }
+  
+  
   
   void
   byte_buffer::put_byte (unsigned char val)

@@ -20,6 +20,7 @@
 #define _ARANE__BYTE_BUFFER__H_
 
 #include <stack>
+#include <vector>
 
 
 namespace arane {
@@ -66,6 +67,9 @@ namespace arane {
     void put_long (unsigned long long val);
     
     void put_bytes (const unsigned char *arr, unsigned int len);
+    
+  public:
+    void resize (unsigned int nsize);
     
   public:
     void push ();

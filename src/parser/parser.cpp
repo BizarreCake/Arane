@@ -109,6 +109,133 @@ namespace arane {
   static ast_package* _parse_package_or_module (parser_state& ps);
   
   
+  static bool
+  _skip_scol (parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    
+    token tok = toks.peek_next ();
+    if (tok.typ == TOK_SCOL || tok.typ == TOK_EOF)
+      toks.next ();
+    else if (tok.typ != TOK_RBRACE)
+      {
+        ps.errs.error (ES_PARSER, "expected ';'", tok.ln, tok.col);
+        return false;
+      }
+    
+    return true;
+  }
+  
+  
+  
+  static basic_types
+  _tok_type_to_basic (token_type typ)
+  {
+    switch (typ)
+      {
+      case TOK_TYPE_INT_NATIVE:     return TYPE_INT_NATIVE;
+      case TOK_TYPE_INT:            return TYPE_INT;
+      case TOK_TYPE_BOOL_NATIVE:    return TYPE_BOOL_NATIVE;
+      case TOK_TYPE_STR:            return TYPE_STR;
+      case TOK_TYPE_ARRAY:          return TYPE_ARRAY;
+      
+      default:
+        return TYPE_INVALID;
+      }
+  }
+  
+  static bool
+  _parse_type_info (parser_state& ps, type_info& ti)
+  {
+    token_seq& toks = ps.toks;
+    
+    ti.types.clear ();
+    
+    int parens = 0;
+    token tok;
+    for (;;)
+      {
+        tok = toks.next ();
+        
+        basic_type bt {
+          .type = _tok_type_to_basic (tok.typ),
+          .name = "",
+        };
+        if (bt.type == TYPE_INVALID)
+          {
+            ps.errs.error (ES_PARSER, "expected a type name", tok.ln, tok.col);
+            return false;
+          }
+        ti.types.push_back (bt);
+        
+        tok = toks.peek_next ();
+        if (tok.typ == TOK_COF)
+          {
+            toks.next ();
+            tok = toks.next ();
+            if (tok.typ != TOK_LPAREN)
+              {
+                ps.errs.error (ES_PARSER, "expected '(' after ':of'", tok.ln, tok.col);
+                return false;
+              }
+            ++ parens;
+          }
+        else if (tok.typ == TOK_OF)
+          toks.next ();
+        else
+          break;
+      }
+    
+    // consume matching parentheses
+    while (parens --> 0)
+      {
+        tok = toks.next ();
+        if (tok.typ != TOK_RPAREN)
+          {
+            ps.errs.error (ES_PARSER, "expected matching ')' in type name", tok.ln, tok.col);
+            return false;
+          }
+      }
+    
+    return true;
+  }
+  
+  /* 
+   * The type is expected to be positioned before an expression.
+   * <type> <atom>
+   */
+  static ast_of_type*
+  _parse_of_type_left (parser_state& ps)
+  {
+    type_info ti;
+    if (!_parse_type_info (ps, ti))
+      return nullptr;
+    
+    ast_expr *expr = _parse_atom (ps);
+    if (!expr)
+      return nullptr;
+    
+    return new ast_of_type (expr, ti);
+  }
+  
+  /* 
+   * <atom> of <type>
+   * Assumes <atom> has already been consumed.
+   */
+  static ast_of_type*
+  _parse_of_type_right (ast_expr *left, parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    toks.next (); // skip 'of'
+    
+    type_info ti;
+    if (!_parse_type_info (ps, ti))
+      return nullptr;
+    
+    return new ast_of_type (left, ti);
+  }
+  
+  
   
   static ast_sub_call*
   _parse_sub_call (parser_state& ps)
@@ -351,41 +478,6 @@ namespace arane {
   
   
   
-  static ast_typename*
-  _parse_typename (parser_state& ps)
-  {
-    token_seq& toks = ps.toks;
-    
-    token tok = toks.next ();
-    int p_ln = tok.ln;
-    int p_col = tok.col;
-    
-    ast_typename_type tn;
-    switch (tok.typ)
-      {
-      case TOK_TYPE_INT_NATIVE: tn = AST_TN_INT_NATIVE; break;
-      case TOK_TYPE_INT: tn = AST_TN_INT; break;
-      
-      default:
-        throw std::runtime_error ("not a typename");
-      }
-    
-    ast_expr *param = nullptr;
-    tok = toks.peek_next ();
-    if (tok.typ == TOK_LPAREN)
-      param = _parse_list (ps);
-    else
-      param = _parse_atom (ps);
-    if (!param)
-      return nullptr;
-    
-    auto ast = new ast_typename (tn, param);
-    ast->set_pos (p_ln, p_col);
-    return ast;
-  }
-  
-  
-  
   static ast_interp_string*
   _parse_interp_string (parser_state& ps)
   {
@@ -439,6 +531,8 @@ namespace arane {
     int p_ln = tok.ln;
     int p_col = tok.col;
     
+    type_info ret_type = type_info::none ();
+    
     // subroutine name
     tok = toks.next ();
     if (tok.typ != TOK_IDENT_NONE)
@@ -467,11 +561,28 @@ namespace arane {
                 toks.next ();
                 break;
               }
+            else if (tok.typ == TOK_DLARROW)
+              {
+                // return type
+                toks.next ();
+                if (!_parse_type_info (ps, ret_type))
+                  return nullptr;
+                
+                tok = toks.next ();
+                if (tok.typ != TOK_RPAREN)
+                  {
+                    ps.errs.error (ES_PARSER, "expected ')' after subroutine "
+                      "return type", tok.ln, tok.col);
+                    return nullptr;
+                  }
+                
+                break;
+              }
             
             ast_expr *atom = _parse_atom (ps);
             if (atom)
               {
-                if ((atom->get_type () == AST_IDENT) || (atom->get_type () == AST_TYPENAME))
+                if ((atom->get_type () == AST_IDENT) || (atom->get_type () == AST_OF_TYPE))
                   sub->add_param (atom);
                 else
                   {
@@ -487,7 +598,7 @@ namespace arane {
               {
                 toks.next ();
               }
-            else if (tok.typ != TOK_RPAREN)
+            else if (tok.typ != TOK_RPAREN && tok.typ != TOK_DLARROW)
               {
                 ps.errs.error (ES_PARSER, "expected ',' or ')' after parameter "
                   "inside subroutine paramter list", tok.ln, tok.col);
@@ -511,6 +622,7 @@ namespace arane {
       return nullptr;
     
     sub->set_body (body);
+    sub->set_return_type (ret_type);
     return sub.release ();
   }
   
@@ -537,7 +649,7 @@ namespace arane {
     toks.next (); // skip sigil
     
     token tok = toks.peek_next ();
-    if (tok.typ != TOK_LBRACE)
+    if (tok.typ != TOK_LPAREN)
       {
         ast_expr *expr = _parse_atom (ps);
         if (!expr)
@@ -545,16 +657,16 @@ namespace arane {
         return new ast_deref (expr);
       }
     
-    toks.next (); // skip {
+    toks.next (); // skip (
     
     std::unique_ptr<ast_expr> expr { _parse_expr (ps) };
     if (!expr.get ())
       return nullptr;
     
     tok = toks.next ();
-    if (tok.typ != TOK_RBRACE)
+    if (tok.typ != TOK_RPAREN)
       {
-        ps.errs.error (ES_PARSER, "expected matching '}' in dereference operator",
+        ps.errs.error (ES_PARSER, "expected matching ')' in dereference operator",
           tok.ln, tok.col);
         return nullptr;
       }
@@ -563,6 +675,60 @@ namespace arane {
   }
   
   
+  
+  static ast_prefix*
+  _parse_prefix (parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    
+    ast_prefix_type op;
+    token tok = toks.next ();
+    switch (tok.typ)
+      {
+      case TOK_INC:     op = AST_PREFIX_INC; break;
+      case TOK_DEC:     op = AST_PREFIX_DEC; break;
+      case TOK_TILDE:   op = AST_PREFIX_STR; break;
+      
+      default:
+        throw std::runtime_error ("invalid prefix operator");
+      }
+    
+    ast_expr *expr = _parse_expr (ps);
+    if (!expr)
+      return nullptr;
+    
+    auto ast = new ast_prefix (expr, op);
+    ast->set_pos (tok.ln, tok.col);
+    return ast;
+  }
+  
+  
+  
+  static ast_postfix*
+  _parse_postfix (ast_expr *left, parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    
+    ast_postfix_type op;
+    token tok = toks.next ();
+    switch (tok.typ)
+      {
+      case TOK_INC:   op = AST_POSTFIX_INC; break;
+      case TOK_DEC:   op = AST_POSTFIX_DEC; break;
+      
+      default:
+        throw std::runtime_error ("invalid postfix operator");
+      }
+    
+    auto ast = new ast_postfix (left, op);
+    ast->set_pos (left->get_line (), left->get_column ());
+    return ast;
+  }
+  
+  
+  
+  // forward dec:
+  static ast_expr* _parse_range_partial (parser_state& ps);
   
   static ast_expr*
   _parse_atom_main (parser_state& ps)
@@ -591,11 +757,6 @@ namespace arane {
       case TOK_MY:
         return _parse_named_unop (ps);
       
-      // typenames
-      case TOK_TYPE_INT_NATIVE:
-      case TOK_TYPE_INT:
-        return _parse_typename (ps);
-      
       case TOK_IDENT_NONE:
       case TOK_IDENT_SCALAR:
       case TOK_IDENT_ARRAY:
@@ -619,6 +780,21 @@ namespace arane {
           auto expr = new ast_integer (toks.next ().val.i64);
           expr->set_pos (tok.ln, tok.col);
           return expr;
+        }
+      
+      case TOK_FALSE:
+        {
+          toks.next ();
+          auto ast = new ast_bool (false);
+          ast->set_pos (tok.ln, tok.col);
+          return ast;
+        }
+      case TOK_TRUE:
+        {
+          toks.next ();
+          auto ast = new ast_bool (true);
+          ast->set_pos (tok.ln, tok.col);
+          return ast;
         }
       
       case TOK_SUB:
@@ -650,7 +826,24 @@ namespace arane {
       case TOK_AT:
         return _parse_deref (ps);
         
+      case TOK_CARET:
+        return _parse_range_partial (ps);
+      
+      case TOK_TYPE_INT_NATIVE:
+      case TOK_TYPE_INT:
+      case TOK_TYPE_BOOL_NATIVE:
+      case TOK_TYPE_STR:
+      case TOK_TYPE_ARRAY:
+        return _parse_of_type_left (ps);
+        
+      // prefix operators
+      case TOK_INC:
+      case TOK_DEC:
+      case TOK_TILDE:
+        return _parse_prefix (ps);
+        
       default:
+        toks.next (); // consume it
         ps.errs.error (ES_PARSER, "expected an atom expression", tok.ln, tok.col);
         return nullptr;
       }
@@ -686,6 +879,19 @@ namespace arane {
     return new ast_range (left, lhs_exc, rhs.release (), rhs_exc);
   }
   
+  ast_expr*
+  _parse_range_partial (parser_state& ps)
+  {
+    token_seq& toks = ps.toks;
+    toks.next (); // skip ^
+    
+    std::unique_ptr<ast_expr> rhs { _parse_atom (ps) };
+    if (!rhs.get ())
+      return nullptr;
+    
+    return new ast_range (new ast_integer (0), false, rhs.release (), true);
+  }
+  
   
   static ast_expr*
   _parse_atom_rest (ast_expr *left, parser_state& ps)
@@ -693,32 +899,47 @@ namespace arane {
     token_seq& toks = ps.toks;
     
     token tok = toks.peek_next ();
-    if (tok.typ == TOK_LBRACKET)
+    switch (tok.typ)
       {
-        // array subscript
-        toks.next ();
-        
-        std::unique_ptr<ast_expr> index { _parse_expr (ps) };
-        if (!index.get ())
-          return nullptr;
-        
-        tok = toks.next ();
-        if (tok.typ != TOK_RBRACKET)
-          {
-            ps.errs.error (ES_PARSER, "expected matching ']'", tok.ln, tok.col);
+      case TOK_LBRACKET:
+        {
+          // array subscript
+          toks.next ();
+          
+          std::unique_ptr<ast_expr> index { _parse_expr (ps) };
+          if (!index.get ())
             return nullptr;
-          }
-        
-        std::unique_ptr<ast_subscript> subsc { new ast_subscript (left, index.get ()) };
-        ast_expr *nexpr = _parse_atom_rest (subsc.get (), ps);
-        if (!nexpr)
-          return nullptr;
-        index.release ();
-        subsc.release ();
-        return nexpr;
+          
+          tok = toks.next ();
+          if (tok.typ != TOK_RBRACKET)
+            {
+              ps.errs.error (ES_PARSER, "expected matching ']'", tok.ln, tok.col);
+              return nullptr;
+            }
+          
+          std::unique_ptr<ast_subscript> subsc { new ast_subscript (left, index.get ()) };
+          ast_expr *nexpr = _parse_atom_rest (subsc.get (), ps);
+          if (!nexpr)
+            return nullptr;
+          index.release ();
+          subsc.release ();
+          return nexpr;
+        }
+      
+      case TOK_CARET:
+      case TOK_RANGE:
+        return _parse_range (left, ps);
+      
+      case TOK_OF:
+        return _parse_of_type_right (left, ps);
+      
+      // postfix operators
+      case TOK_INC:
+      case TOK_DEC:
+        return _parse_postfix (left, ps);
+      
+      default: ;
       }
-    else if (tok.typ == TOK_CARET || tok.typ == TOK_RANGE)
-      return _parse_range (left, ps);
     
     return left;
   }
@@ -797,7 +1018,7 @@ namespace arane {
     token_seq& toks = ps.toks;
     
     token tok = toks.peek_next ();
-    if (tok.typ == TOK_ADD || tok.typ == TOK_SUB || tok.typ == TOK_DOT)
+    if (tok.typ == TOK_ADD || tok.typ == TOK_SUB || tok.typ == TOK_TILDE)
       {
         toks.next ();
         
@@ -822,7 +1043,7 @@ namespace arane {
     return parent;
   }
   
-  // binary ops:  + - .
+  // binary ops:  + - ~
   static ast_expr*
   _parse_expr_4 (parser_state& ps)
   {
@@ -1115,13 +1336,8 @@ namespace arane {
         toks.restore ();
       }
     
-    
-    token tok = toks.next ();
-    if (tok.typ != TOK_SCOL)
-      {
-        ps.errs.error (ES_PARSER, "expected ';'", tok.ln, tok.col);
-        return nullptr;
-      }
+    if (!_skip_scol (ps))
+      return nullptr;
     
     return new ast_return (expr.release ());
   }
@@ -1416,12 +1632,8 @@ namespace arane {
       }
     std::string what = tok.val.str;
     
-    tok = toks.next ();
-    if (tok.typ != TOK_SCOL)
-      {
-        ps.errs.error (ES_PARSER, "expected ';'", tok.ln, tok.col);
-        return nullptr;
-      }
+    if (!_skip_scol (ps))
+      return nullptr;
     
     return new ast_use (what);
   }
@@ -1459,19 +1671,21 @@ namespace arane {
       case TOK_USE:
         return _parse_use (ps);
       
+      // empty statement
+      case TOK_SCOL:
+        {
+          toks.next ();
+          return new ast_expr_stmt (new ast_undef ());
+        }
+      
       default:
         {
-          token btok = toks.peek_next ();
           std::unique_ptr<ast_expr> expr { _parse_expr (ps) };
           if (!expr.get ())
             return nullptr;
           
-          token tok = toks.next ();
-          if (tok.typ != TOK_SCOL)
-            {
-              ps.errs.error (ES_PARSER, "expected ';'", btok.ln, btok.col);
-              return nullptr;
-            }
+          if (!_skip_scol (ps))
+            return nullptr;
           
           return new ast_expr_stmt (expr.release ());
         }

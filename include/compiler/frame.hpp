@@ -20,6 +20,7 @@
 #define _ARANE__COMPILER__FRAME__H_
 
 #include "parser/ast.hpp"
+#include "common/types.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -27,21 +28,11 @@
 
 namespace arane {
   
-  enum variable_type
-  {
-    VT_NONE,
-    VT_INT_NATIVE,
-    VT_INT,
-  };
-  
-  variable_type tn_type_to_var_type (ast_typename_type type);
-  
-  
   struct variable
   {
     int index;
     std::string name;
-    variable_type type;
+    type_info type;
   };
   
   
@@ -79,6 +70,7 @@ namespace arane {
     
   public:
     std::unordered_map<std::string, int> extra;
+    ast_sub *sub; // if subroutine frame
     
   private:
     int get_next_loc_index ();
@@ -108,12 +100,14 @@ namespace arane {
     /* 
      * Inserts a new local variable to the frame's local variable list.
      */
-    void add_local (const std::string& name, variable_type typ = VT_NONE);
+    void add_local (const std::string& name);
+    void add_local (const std::string& name, const type_info& ti);
     
     /* 
      * Inserts a new argument to the frame's argument list.
      */
-    void add_arg (const std::string& name, variable_type typ = VT_NONE);
+    void add_arg (const std::string& name);
+    void add_arg (const std::string& name, const type_info& ti);
     
     
     

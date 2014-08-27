@@ -27,7 +27,7 @@ namespace arane {
    * Right-hand side value is expected to be at the top of the stack.
    */
   void
-  compiler::assign_in_stack (ast_expr *lhs)
+  compiler::assign_in_stack (ast_expr *lhs, bool keep_result = true)
   {
     switch (lhs->get_type ())
       {
@@ -38,18 +38,25 @@ namespace arane {
           
           variable *var = frm.get_local (ident->get_name ());
           if (var)
-            this->cgen->emit_storeload (var->index);
+            {
+              if (keep_result)
+                this->cgen->emit_storeload (var->index);
+              else
+                this->cgen->emit_store (var->index);
+            }
           else
             {
               var = frm.get_arg (ident->get_name ());
               if (var)
                 {
-                  this->cgen->emit_dup ();
+                  if (keep_result)
+                    this->cgen->emit_dup ();
                   this->cgen->emit_arg_store (var->index);
                 }
               else
                 {
-                  this->cgen->emit_dup ();
+                  if (keep_result)
+                    this->cgen->emit_dup ();
                   this->cgen->emit_store_global (this->insert_string (ident->get_name ()));
                 }
             }
@@ -64,22 +71,35 @@ namespace arane {
   }
   
   
-  static void
-  _enforce_type_constraint (code_generator *cgen, variable_type vt)
+  void
+  compiler::enforce_assignment_type (const type_info& lhs_type, ast_expr *rhs)
   {
-    switch (vt)
+    if (lhs_type.is_none ())
+      return;
+    
+    auto dt = this->deduce_type (rhs);
+    if (dt.is_none ())
       {
-      case VT_INT_NATIVE:
-        cgen->emit_to_int ();
-        break;
-      
-      case VT_INT:
-        cgen->emit_to_bint ();
-        break;
-      
-      default: ;
+        this->cgen->emit_to_compatible (lhs_type);
+      }
+    else
+      {
+        auto tc = dt.check_compatibility (lhs_type);
+        if (tc == TC_INCOMPATIBLE)
+          {
+            this->errs.error (ES_COMPILER,
+              "attempting to assign a value of an incompatible type `"
+              + dt.str () + "' where `" + lhs_type.str () + "' is expected",
+              rhs->get_line (), rhs->get_column ());
+            return;
+          }
+        else if (tc == TC_CASTABLE)
+          {
+            this->cgen->emit_to_compatible (lhs_type);
+          }
       }
   }
+  
   
   void
   compiler::assign_to_ident (ast_ident *lhs, ast_expr *rhs)
@@ -101,7 +121,7 @@ namespace arane {
     variable *var = frm.get_local (lhs->get_name ());
     if (var)
       {
-        _enforce_type_constraint (this->cgen, var->type);
+        this->enforce_assignment_type (var->type, rhs);
         this->cgen->emit_storeload (var->index);
       }
     else
@@ -109,7 +129,7 @@ namespace arane {
         var = frm.get_arg (lhs->get_name ());
         if (var)
           {
-            _enforce_type_constraint (this->cgen, var->type);
+            this->enforce_assignment_type (var->type, rhs);
             this->cgen->emit_dup ();
             this->cgen->emit_arg_store (var->index);
           }
@@ -246,8 +266,7 @@ namespace arane {
   
   
   static bool
-  _add_local (error_tracker& errs, frame& frm, ast_expr *expr,
-    variable_type vt = VT_NONE)
+  _add_local (error_tracker& errs, frame& frm, ast_expr *expr, const type_info& ti)
   {
     switch (expr->get_type ())
       {
@@ -263,7 +282,7 @@ namespace arane {
               return false;
             }
           
-          frm.add_local (name, vt);
+          frm.add_local (name, ti);
         }
         break;
       
@@ -275,32 +294,16 @@ namespace arane {
               if (elem->get_type () == AST_IDENT)
                 {
                   ast_ident *ident = static_cast<ast_ident *> (elem);
-                  frm.add_local (ident->get_name (), vt);
+                  frm.add_local (ident->get_name (), ti);
                 }
             }
         }
         break;
       
-      case AST_TYPENAME:
+      case AST_OF_TYPE:
         {
-          ast_typename *atn = static_cast<ast_typename *> (expr);
-          switch (atn->get_op ())
-            {
-            // int
-            case AST_TN_INT_NATIVE:
-              _add_local (errs, frm, atn->get_param (), VT_INT_NATIVE);
-              break;
-            
-            // Int
-            case AST_TN_INT:
-              _add_local (errs, frm, atn->get_param (), VT_INT);
-              break;
-            
-            default:
-              errs.error (ES_COMPILER, "invalid type name",
-                atn->get_line (), atn->get_column ());
-              return false;
-            }
+          ast_of_type *atn = static_cast<ast_of_type *> (expr);
+          _add_local (errs, frm, atn->get_expr (), atn->get_typeinfo ());
         }
         break;
       
@@ -313,7 +316,7 @@ namespace arane {
   static bool
   _add_locals (error_tracker& errs, ast_named_unop *unop, frame& frm)
   {
-    return _add_local (errs, frm, unop->get_param ());
+    return _add_local (errs, frm, unop->get_param (), type_info::none ());
   }
   
   void
@@ -340,9 +343,10 @@ namespace arane {
             }
         }
       
-      case AST_TYPENAME:
-        this->compile_assign ((static_cast<ast_typename *> (lhs))->get_param (), rhs);
+      case AST_OF_TYPE:
+        this->compile_assign ((static_cast<ast_of_type *> (lhs))->get_expr (), rhs);
         break;
+      
       
       case AST_IDENT:
         this->assign_to_ident (static_cast<ast_ident *> (lhs), rhs);
@@ -365,6 +369,58 @@ namespace arane {
           lhs->get_line (), lhs->get_column ());
         return;
       }
+  }
+  
+  
+  
+  void
+  compiler::compile_prefix_inc (ast_prefix *ast)
+  {
+    ast_expr *expr = ast->get_expr ();
+    
+    this->compile_expr (expr);
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_add ();
+    
+    this->assign_in_stack (expr);
+  }
+  
+  void
+  compiler::compile_prefix_dec (ast_prefix *ast)
+  {
+    ast_expr *expr = ast->get_expr ();
+    
+    this->compile_expr (expr);
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_sub ();
+    
+    this->assign_in_stack (expr);
+  }
+  
+  
+  
+  void
+  compiler::compile_postfix_inc (ast_postfix *ast)
+  {
+    ast_expr *expr = ast->get_expr ();
+    
+    this->compile_expr (expr);
+    this->cgen->emit_dup ();
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_add ();
+    this->assign_in_stack (expr, false);
+  }
+  
+  void
+  compiler::compile_postfix_dec (ast_postfix *ast)
+  {
+    ast_expr *expr = ast->get_expr ();
+    
+    this->compile_expr (expr);
+    this->cgen->emit_dup ();
+    this->cgen->emit_push_int (1);
+    this->cgen->emit_sub ();
+    this->assign_in_stack (expr, false);
   }
 }
 

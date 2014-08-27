@@ -29,6 +29,146 @@
 
 namespace arane {
   
+  static std::string
+  _get_type_name_from_ptype (p_basic_type type)
+  {
+    switch (type)
+      {
+      case PTYPE_INT_NATIVE:   return "int";
+      case PTYPE_INT:          return "Int";
+      case PTYPE_BOOL_NATIVE:  return "bool";
+      case PTYPE_STR:          return "Str";
+      case PTYPE_ARRAY:        return "Array";
+      
+      default: return "<invalid type>";
+      }
+  }
+  
+  static std::string
+  _get_type_name_from_value (p_value& val)
+  {
+    switch (val.type)
+      {
+      case PERL_UNDEF:      return "undef";
+      case PERL_INT:        return "int";
+      case PERL_BOOL:       return "bool";
+      
+      case PERL_REF:
+        {
+          if (!val.val.ref)
+            return "null";
+          switch (val.val.ref->type)
+            {
+            case PERL_ARRAY:    return "Array";
+            case PERL_DSTR:     return "Str";
+            case PERL_CSTR:     return "Str";
+            case PERL_BIGINT:   return "Int";
+            
+            default: return "<invalid type>";
+            }
+        }
+        break;
+      
+      default: return "<invalid type>";
+      }
+  }
+  
+  /* 
+   * Attempts to cast the specified value into a compatible type.
+   */
+  p_value
+  p_value_to_compatible (p_value& a, p_basic_type *types, int count,
+    virtual_machine& vm)
+  {
+    if (count != 1)
+      throw std::runtime_error ("not implemented");
+    
+#define THROW_TYPE_ERROR \
+  throw type_error ( \
+    "cannot cast value of type `" + _get_type_name_from_value (a) + \
+    "' to type `" + _get_type_name_from_ptype (etyp) + "'");
+    
+    p_basic_type etyp = types[0];
+    switch (etyp)
+      {
+      // to int
+      case PTYPE_INT_NATIVE:
+        switch (a.type)
+          {
+          // int -> int
+          case PERL_INT:
+            return a;
+          
+          default:
+            THROW_TYPE_ERROR
+          }
+        break;
+      
+      // to Int
+      case PTYPE_INT:
+        switch (a.type)
+          {
+          // int -> Int
+          case PERL_INT:
+            {
+              p_value *data = vm.get_gc ().alloc (true);
+              data->type = PERL_BIGINT;
+              data->val.bint = new big_int (a.val.i64);
+              
+              p_value res;
+              res.type = PERL_REF;
+              res.val.ref = data;
+              return res;
+            }
+            break;
+          
+          case PERL_REF:
+            switch (a.val.ref->type)
+              {
+              // Int -> Int
+              case PERL_BIGINT:
+                return a;
+              
+              default:
+                THROW_TYPE_ERROR
+              }
+            break;
+          
+          default:
+            THROW_TYPE_ERROR
+          }
+        break;
+      
+      // to Str
+      case PTYPE_STR:
+        switch (a.type)
+          {
+          case PERL_REF:
+            switch (a.val.ref->type)
+              {
+              case PERL_DSTR:
+                return a;
+              
+              default:
+                THROW_TYPE_ERROR
+              }
+            break;
+          
+          case PERL_CSTR:
+            return a;
+          
+          default:
+            THROW_TYPE_ERROR
+          }
+        break;
+      
+      default:
+        THROW_TYPE_ERROR
+      }
+  }
+  
+  
+  
   /* 
    * Removes GC protection from the specified value.
    */
@@ -112,6 +252,9 @@ namespace arane {
     
     switch (val.type)
       {
+      case PERL_BOOL:
+        return std::string (val.val.bl ? "True" : "False");
+        
       case PERL_CSTR:
         return std::string (val.val.cstr.data);
       
@@ -182,9 +325,37 @@ namespace arane {
   {
     switch (a.type)
       {
+      case PERL_BOOL:
+        switch (b.type)
+          {
+          case PERL_BOOL:
+            return a.val.bl == b.val.bl;
+            
+          case PERL_INT:
+            return a.val.bl == (b.val.i64 ? true : false);
+          
+          case PERL_REF:
+            switch (b.type)
+              {
+              case PERL_BIGINT:
+                return a.val.bl == !b.val.ref->val.bint->is_zero ();
+              
+              default:
+                return false;
+              }
+            break;
+          
+          default:
+            return false;
+          }
+        break;
+      
       case PERL_INT:
         switch (b.type)
           {
+          case PERL_BOOL:
+            return (a.val.i64 ? true : false) == b.val.bl;
+          
           case PERL_INT:
             return a.val.i64 == b.val.i64;
           
@@ -227,6 +398,9 @@ namespace arane {
           case PERL_BIGINT:
             switch (b.type)
               {
+              case PERL_BOOL:
+                return !a.val.ref->val.bint->is_zero () == b.val.bl;
+              
               case PERL_INT:
                 return (a.val.ref->val.bint->cmp (b.val.i64) == 0);
               
@@ -1025,6 +1199,58 @@ namespace arane {
     p_value res;
     res.type = PERL_REF;
     res.val.ref = data;
+    return res;
+  }
+  
+  
+  
+  p_value
+  p_value_to_bool (p_value& val, virtual_machine& vm)
+  {
+    p_value res;
+    res.type = PERL_BOOL;
+    res.val.bl = true;
+    
+    switch (val.type)
+      {
+      case PERL_INT:
+        res.val.bl = val.val.i64;
+        break;
+      
+      case PERL_BOOL:
+        res.val.bl = val.val.bl;
+        break;
+      
+      case PERL_REF:
+        switch (val.val.ref->type)
+          {
+          case PERL_BIGINT:
+            res.val.bl = !val.val.ref->val.bint->is_zero ();
+            break;
+          
+          case PERL_CSTR:
+            res.val.bl = val.val.ref->val.cstr.len;
+            break;
+          
+          case PERL_DSTR:
+            res.val.bl = val.val.ref->val.str.len;
+            break;
+          
+          case PERL_ARRAY:
+            res.val.bl = val.val.ref->val.arr.len;
+            break;
+          
+          default: ;
+          }
+        break;
+      
+      case PERL_UNDEF:
+        res.val.bl = false;
+        break;
+      
+      default: ;
+      }
+    
     return res;
   }
   

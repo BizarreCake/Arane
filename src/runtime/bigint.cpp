@@ -231,10 +231,18 @@ namespace arane {
   void
   big_int::uadd (unsigned int other)
   {
+    if (this->size == 0)
+      {
+        if (!other)
+          return;
+        this->resize (1);
+      }
+    
     unsigned int r, carry = 0;
     
     r = this->limbs[0] + other + carry;
     carry = (r < this->limbs[0]);
+    this->limbs[0] = r;
     
     for (unsigned int i = 1; carry && (i < this->size); ++i)
       {
@@ -283,6 +291,14 @@ namespace arane {
   void
   big_int::usub (unsigned int other)
   {
+    if (this->size == 0)
+      {
+        if (!other)
+          return;
+         
+        // shouldn't happen
+      }
+    
     if (this->limbs[0] >= other)
       this->limbs[0] -= other;
     else
@@ -337,7 +353,7 @@ namespace arane {
     for (unsigned int i = 0; i < other.size; ++i)
       {
         big_int part = orig;
-        part.mul (other.limbs[i]);
+        part.umul (other.limbs[i]);
         part.shift_left_by_places (i);
         this->add (part);
       }

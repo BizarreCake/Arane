@@ -21,26 +21,12 @@
 
 namespace arane {
   
-  variable_type
-  tn_type_to_var_type (ast_typename_type type)
-  {
-    switch (type)
-      {
-      case AST_TN_INT_NATIVE:     return VT_INT_NATIVE;
-      case AST_TN_INT:            return VT_INT;
-      
-      default:
-        return VT_NONE;
-      }
-  }
-  
-  
-  
   frame::frame (frame_type type, frame *parent)
   {
     this->type = type;
     this->parent = parent;
     this->next_loc_index = 0;
+    this->sub = nullptr;
   }
   
   
@@ -101,13 +87,25 @@ namespace arane {
    * Inserts a new local variable to the frame's local variable list.
    */
   void
-  frame::add_local (const std::string& name, variable_type typ)
+  frame::add_local (const std::string& name)
+  {
+    type_info ti;
+    ti.types.push_back ({
+      .type = TYPE_NONE,
+      .name = "",
+    });
+    
+    this->add_local (name, ti);
+  }
+  
+  void
+  frame::add_local (const std::string& name, const type_info& ti)
   {
     int index = this->locs.size ();
     this->locs.push_back ({
       .index = this->get_next_loc_index (),
       .name = name,
-      .type = typ,
+      .type = ti,
     });
     
     this->loc_map[name] = index;
@@ -117,13 +115,25 @@ namespace arane {
    * Inserts a new argument to the frame's argument list.
    */
   void
-  frame::add_arg (const std::string& name, variable_type typ)
+  frame::add_arg (const std::string& name)
+  {
+    type_info ti;
+    ti.types.push_back ({
+      .type = TYPE_NONE,
+      .name = "",
+    });
+    
+    this->add_arg (name, ti);
+  } 
+   
+  void
+  frame::add_arg (const std::string& name, const type_info& ti)
   {
     int index = this->args.size ();
     this->args.push_back ({
       .index = index,
       .name = name,
-      .type = typ,
+      .type = ti,
     });
     
     this->arg_map[name] = index;

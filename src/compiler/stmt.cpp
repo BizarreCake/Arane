@@ -18,6 +18,7 @@
 
 #include "compiler/compiler.hpp"
 #include "compiler/codegen.hpp"
+#include "common/utils.hpp"
 
 
 namespace arane {
@@ -44,9 +45,8 @@ namespace arane {
     
     auto main_part = ast->get_main_part ();
     this->compile_expr (main_part.cond);
-    this->cgen->emit_is_false ();
-    this->cgen->emit_push_int (1);
-    this->cgen->emit_je (lbl_mpart_false);
+    this->cgen->emit_to_bool ();
+    this->cgen->emit_jf (lbl_mpart_false);
     
     // main part true
     this->compile_block (main_part.body);
@@ -64,9 +64,8 @@ namespace arane {
         int lbl_part_false = this->cgen->create_label ();
         
         this->compile_expr (elsif.cond);
-        this->cgen->emit_is_false ();
-        this->cgen->emit_push_int (1);
-        this->cgen->emit_je (lbl_part_false);
+        this->cgen->emit_to_bool ();
+        this->cgen->emit_jf (lbl_part_false);
         
         // part true
         this->compile_block (elsif.body);
@@ -104,9 +103,8 @@ namespace arane {
     // test
     this->cgen->mark_label (lbl_loop);
     this->compile_expr (ast->get_cond ());
-    this->cgen->emit_is_false ();
-    this->cgen->emit_push_int (1);
-    this->cgen->emit_je (lbl_done);
+    this->cgen->emit_to_bool ();
+    this->cgen->emit_jf (lbl_done);
     
     // body
     this->compile_block (ast->get_body (), false);
@@ -131,7 +129,11 @@ namespace arane {
     
     this->push_frame (FT_LOOP);
     frame& frm = this->top_frame ();
-    frm.add_local (ast->get_var ()->get_name ());
+    {
+      type_info ti {};
+      ti.push_basic (TYPE_INT_NATIVE);
+      frm.add_local (ast->get_var ()->get_name (), ti);
+    }
     int loop_var = frm.get_local (ast->get_var ()->get_name ())->index;
     
     // store range end
@@ -271,9 +273,8 @@ namespace arane {
     if (ast->get_cond ())
       {
         this->compile_expr (ast->get_cond ());
-        this->cgen->emit_is_false ();
-        this->cgen->emit_push_int (1);
-        this->cgen->emit_je (lbl_done);
+        this->cgen->emit_to_bool ();
+        this->cgen->emit_jf (lbl_done);
       }
     
     // body
@@ -314,6 +315,14 @@ namespace arane {
   compiler::compile_use (ast_use *ast)
   {
     this->mod->add_dependency (ast->get_value ());
+    
+    // parse signatures of file
+    try
+      {
+        this->sigs.parse (utils::module_name_to_path (ast->get_value ()));
+      }
+    catch (const std::exception& ex)
+      { }
   }
   
   

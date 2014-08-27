@@ -21,6 +21,8 @@
 #include "compiler/frame.hpp"
 #include <stdexcept>
 
+#include <iostream> // DEBUG
+
 
 namespace arane {
   
@@ -36,6 +38,17 @@ namespace arane {
   compiler::compile_integer (ast_integer *ast)
   {
     this->cgen->emit_push_int (ast->get_value ());
+  }
+  
+  
+  
+  void
+  compiler::compile_bool (ast_bool *ast)
+  {
+    if (ast->get_value ())
+      this->cgen->emit_push_true ();
+    else
+      this->cgen->emit_push_false ();
   }
   
   
@@ -60,17 +73,6 @@ namespace arane {
           {
             // subroutine parameter
             this->cgen->emit_arg_load (var->index);
-            switch (var->type)
-              {
-              case VT_INT_NATIVE:
-                this->cgen->emit_to_int ();
-                break;
-              case VT_INT:
-                this->cgen->emit_to_bint ();
-                break;
-              
-              default: ;
-              }
           }
         else
           {
@@ -86,12 +88,10 @@ namespace arane {
   compiler::compile_string (ast_string *ast)
   {
     unsigned int str_index = this->insert_string (ast->get_value ());
-    this->mod->add_reloc ({
-      .type = REL_DATA_CSTR,
-      .pos  = this->cgen->get_buffer ().get_pos () + 1, // skip opcode
-      .dest = str_index,
-      .size = 4,
-    });
+    this->insert_reloc (REL_DATA_CSTR,
+      this->cgen->create_and_mark_label (),
+      str_index, 4, 1 /* +1 skip opcode */);
+    
     this->cgen->emit_push_cstr (str_index);
   }
   
@@ -114,12 +114,10 @@ namespace arane {
         if (ent.type == ast_interp_string::ISET_PART)
           {
             unsigned int str_index = this->insert_string (ent.val.str);
-            this->mod->add_reloc ({
-              .type = REL_DATA_CSTR,
-              .pos  = this->cgen->get_buffer ().get_pos () + 1, // skip opcode
-              .dest = str_index,
-              .size = 4,
-            });
+            this->insert_reloc (REL_DATA_CSTR,
+              this->cgen->create_and_mark_label (),
+              str_index, 4, 1 /* +1 skip opcode */);
+            
             this->cgen->emit_push_cstr (str_index);
           }
         else
@@ -179,7 +177,7 @@ namespace arane {
   
   static void
   _declare_var (error_tracker& errs, code_generator *cgen, frame& frm,
-    ast_expr *expr, variable_type type = VT_NONE)
+    ast_expr *expr, const type_info& ti)
   {
     if (expr->get_type () == AST_IDENT)
       {
@@ -196,7 +194,7 @@ namespace arane {
         variable *var = frm.get_local (name);
         if (!var)
           {
-            frm.add_local (name, type);
+            frm.add_local (name, ti);
             var = frm.get_local (name);
           }
         
@@ -222,7 +220,7 @@ namespace arane {
     if (param->get_type () == AST_IDENT)
       {
         _declare_var (this->errs, this->cgen, this->top_frame (),
-          static_cast<ast_ident *> (param));
+          static_cast<ast_ident *> (param), type_info::none ());
       }
     else if (param->get_type () == AST_LIST)
       {
@@ -236,24 +234,24 @@ namespace arane {
                 return;
               }
             
-            _declare_var (this->errs, this->cgen, this->top_frame (), expr);
+            _declare_var (this->errs, this->cgen, this->top_frame (), expr,
+              type_info::none ());
             this->cgen->emit_pop ();
           }
         
         this->cgen->emit_push_undef ();
       }
-    else if (param->get_type () == AST_TYPENAME)
+    else if (param->get_type () == AST_OF_TYPE)
       {
-        ast_typename *tn = static_cast<ast_typename *> (param);
-        if (tn->get_param ()->get_type () == AST_IDENT)
+        ast_of_type *tn = static_cast<ast_of_type *> (param);
+        if (tn->get_expr ()->get_type () == AST_IDENT)
           {
             _declare_var (this->errs, this->cgen, this->top_frame (),
-              static_cast<ast_ident *> (tn->get_param ()),
-              tn_type_to_var_type (tn->get_op ()));
+              static_cast<ast_ident *> (tn->get_expr ()), tn->get_typeinfo ());
           }
-        else if (tn->get_param ()->get_type () == AST_LIST)
+        else if (tn->get_expr ()->get_type () == AST_LIST)
           {
-            ast_list *lst = static_cast<ast_list *> (tn->get_param ());
+            ast_list *lst = static_cast<ast_list *> (tn->get_expr ());
             for (ast_expr *expr : lst->get_elems ())
               {
                 if (expr->get_type () != AST_IDENT)
@@ -264,7 +262,7 @@ namespace arane {
                   }
                 
                 _declare_var (this->errs, this->cgen, this->top_frame (), expr,
-                  tn_type_to_var_type (tn->get_op ()));
+                  tn->get_typeinfo ());
                 this->cgen->emit_pop ();
               }
             
@@ -273,7 +271,7 @@ namespace arane {
         else
           {
             errs.error (ES_COMPILER, "expected identifier or list after type name",
-              tn->get_param ()->get_line (), tn->get_param ()->get_column ());
+              tn->get_expr ()->get_line (), tn->get_expr ()->get_column ());
             return;
           }
       }
@@ -364,11 +362,11 @@ namespace arane {
       }
     
     this->cgen->mark_label (lbl_false);
-    this->cgen->emit_push_int (0);
+    this->cgen->emit_push_false ();
     this->cgen->emit_jmp (lbl_over);
     
     this->cgen->mark_label (lbl_true);
-    this->cgen->emit_push_int (1);
+    this->cgen->emit_push_true ();
     
     this->cgen->mark_label (lbl_over);
   }
@@ -488,9 +486,8 @@ namespace arane {
     
     // test
     this->compile_expr (ast->get_test ());
-    this->cgen->emit_is_false ();
-    this->cgen->emit_push_int (1);
-    this->cgen->emit_je (lbl_mpart_false);
+    this->cgen->emit_to_bool ();
+    this->cgen->emit_jf (lbl_mpart_false);
     
     // consequent
     this->compile_expr (ast->get_conseq ());
@@ -506,6 +503,57 @@ namespace arane {
   
   
   void
+  compiler::compile_prefix (ast_prefix *ast)
+  {
+    switch (ast->get_op ())
+      {
+      case AST_PREFIX_INC:
+        this->compile_prefix_inc (ast);
+        break;
+      
+      case AST_PREFIX_DEC:
+        this->compile_prefix_dec (ast);
+        break;
+      
+      case AST_PREFIX_STR:
+        this->compile_prefix_str (ast);
+        break;
+      
+      default:
+        throw std::runtime_error ("invalid prefix operator");
+      }
+  }
+  
+  void
+  compiler::compile_prefix_str (ast_prefix *ast)
+  {
+    this->compile_expr (ast->get_expr ());
+    this->cgen->emit_to_str ();
+  }
+  
+  
+   
+  void
+  compiler::compile_postfix (ast_postfix *ast)
+  {
+    switch (ast->get_op ())
+      {
+      case AST_POSTFIX_INC:
+        this->compile_postfix_inc (ast);
+        break;
+      
+      case AST_POSTFIX_DEC:
+        this->compile_postfix_dec (ast);
+        break;
+      
+      default:
+        throw std::runtime_error ("invalid postfix operator");
+      }
+  }
+  
+  
+  
+  void
   compiler::compile_expr (ast_expr *ast)
   {
     switch (ast->get_type ())
@@ -516,6 +564,10 @@ namespace arane {
       
       case AST_INTEGER:
         this->compile_integer (static_cast<ast_integer *> (ast));
+        break;
+      
+      case AST_BOOL:
+        this->compile_bool (static_cast<ast_bool *> (ast));
         break;
       
       case AST_IDENT:
@@ -568,6 +620,14 @@ namespace arane {
       
       case AST_CONDITIONAL:
         this->compile_conditional (static_cast<ast_conditional *> (ast));
+        break;
+      
+      case AST_PREFIX:
+        this->compile_prefix (static_cast<ast_prefix *> (ast));
+        break;
+      
+      case AST_POSTFIX:
+        this->compile_postfix (static_cast<ast_postfix *> (ast));
         break;
         
       default:

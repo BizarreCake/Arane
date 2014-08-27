@@ -20,6 +20,7 @@
 #define _ARANE__CODEGEN__H_
 
 #include "common/byte_buffer.hpp"
+#include "common/types.hpp"
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -33,9 +34,17 @@ namespace arane {
   class code_generator
   {
   private:
+    enum label_type
+    {
+      LT_REGULAR,
+      LT_PLACEHOLDER,
+    };
+    
     struct label_t
     {
+      int type;
       unsigned int pos;
+      int ph_id;   // size of placeholder stack at creation
     };
     
     struct label_use_t
@@ -44,6 +53,13 @@ namespace arane {
       unsigned int pos;
       bool abs;
       char size;
+      int ph_id;  // size of placeholder stack at creation
+    };
+    
+    struct ph_info
+    {
+      byte_buffer *rest;
+      unsigned int start;
     };
     
   private:
@@ -53,6 +69,8 @@ namespace arane {
     std::vector<label_use_t> label_uses;
     int next_lbl_id;
     
+    std::stack<ph_info> phs;
+    
   public:
     inline byte_buffer& get_buffer () { return this->buf; }
     
@@ -61,6 +79,19 @@ namespace arane {
      * Constructs a code generator on top of the specified byte buffer.
      */
     code_generator (byte_buffer& buf);
+    
+    ~code_generator ();
+    
+  public:
+    inline unsigned int
+    get_pos ()
+      { return this->buf.get_pos (); }
+    void
+    set_pos (unsigned int pos)
+      { this->buf.set_pos (pos); }
+    void
+    seek_to_end ()
+      { this->buf.set_pos (this->buf.get_size ()); }
     
   public:
     /* 
@@ -74,6 +105,11 @@ namespace arane {
     void mark_label (int lbl);
     
     /* 
+     * Same as create_label () immediately followed by mark_label ().
+     */
+    int create_and_mark_label ();
+    
+    /* 
      * Updates all code locations that reference marked labels.
      */
     void fix_labels ();
@@ -83,6 +119,32 @@ namespace arane {
      * marked or invalid.
      */
     int get_label_pos (int lbl);
+    
+    
+    
+    /* 
+     * Creates and returns a special placeholder label.
+     */
+    int create_placeholder ();
+    
+    /* 
+     * Sets the current position to the specified label.
+     */
+    void move_to_label (int lbl);
+    
+    /* 
+     * Sets up space for the placeholder the code generator is currently in.
+     */
+    void placeholder_start ();
+    
+    /* 
+     * Closes the current placeholder.
+     */
+    void placeholder_end ();
+    
+    
+    
+    void put_zeroes (unsigned int count);
     
     
     
@@ -99,6 +161,8 @@ namespace arane {
     void emit_dupn (unsigned char n);
     void emit_load_global (unsigned int pos);
     void emit_store_global (unsigned int pos);
+    void emit_push_true ();
+    void emit_push_false ();
     
     void emit_add ();
     void emit_sub ();
@@ -106,8 +170,6 @@ namespace arane {
     void emit_div ();
     void emit_mod ();
     void emit_concat ();
-    void emit_is_false ();
-    void emit_is_true ();
     void emit_ref ();
     void emit_deref ();
     void emit_ref_assign ();
@@ -120,6 +182,8 @@ namespace arane {
     void emit_jle (int lbl);
     void emit_jg (int lbl);
     void emit_jge (int lbl);
+    void emit_jt (int lbl);
+    void emit_jf (int lbl);
     
     void emit_alloc_array (unsigned int len);
     void emit_array_set ();
@@ -130,6 +194,7 @@ namespace arane {
     void emit_to_str ();
     void emit_to_int ();
     void emit_to_bint ();
+    void emit_to_bool ();
     
     void emit_push_frame (unsigned int locs);
     void emit_pop_frame ();
@@ -144,6 +209,8 @@ namespace arane {
     void emit_arg_load (unsigned char index);
     void emit_arg_store (unsigned char index);
     void emit_arg_load_ref (unsigned char index);
+    
+    void emit_to_compatible (const type_info& ti);
     
     void emit_exit ();
     void emit_checkpoint (int n);

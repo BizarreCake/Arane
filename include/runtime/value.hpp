@@ -19,6 +19,7 @@
 #ifndef _ARANE__RUNTIME__VALUE__H_
 #define _ARANE__RUNTIME__VALUE__H_
 
+#include "runtime/types.hpp"
 #include <string>
 
 
@@ -40,6 +41,9 @@ namespace arane {
     PERL_DSTR,    // dynamic string
     PERL_ARRAY,
     PERL_BIGINT,
+    PERL_BOOL,
+    
+    PERL_TYPE,
     
     // special value type used internally by the virtual machine.
     PERL_INTERNAL,
@@ -58,6 +62,8 @@ namespace arane {
       {
         long long i64;
         big_int *bint;
+        bool bl;
+        p_basic_type typ;
         struct
           {
             const char *data;
@@ -110,6 +116,14 @@ namespace arane {
   
   
   
+  /* 
+   * Attempts to cast the specified value into a compatible type.
+   */
+  p_value p_value_to_compatible (p_value& a, p_basic_type *types, int count,
+    virtual_machine& vm);
+  
+  
+  
   long long p_value_array_length (p_value& arr);
   
   
@@ -120,6 +134,7 @@ namespace arane {
   p_value p_value_to_str (p_value& val, virtual_machine& vm);
   p_value p_value_to_int (p_value& val, virtual_machine& vm);
   p_value p_value_to_big_int (p_value& val, virtual_machine& vm);
+  p_value p_value_to_bool (p_value& val, virtual_machine& vm);
   
   
   /* 

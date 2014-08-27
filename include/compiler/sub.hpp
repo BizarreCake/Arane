@@ -20,9 +20,24 @@
 #define _ARANE__COMPILER__SUB__H_
 
 #include "parser/ast.hpp"
+#include "common/types.hpp"
+#include <vector>
 
 
 namespace arane {
+  
+  // forward dec:
+  class compilation_context;
+  
+
+  struct subroutine_param
+  {
+    std::string name;
+    
+    // the type of parameter (inferred statically by the compiler).
+    // should it be known at compile time, a runtime check can be avoided.
+    type_info type;
+  };
   
   /* 
    * Holds subroutine information.
@@ -37,6 +52,11 @@ namespace arane {
     
     // The name of the subroutine.
     std::string name;
+    
+    std::vector<subroutine_param> params;
+    
+    // The return type
+    type_info ret_ti;
   };
   
   
@@ -48,8 +68,8 @@ namespace arane {
     // The ast node of the call.
     ast_node *ast;
     
-    // The position of the call instruction.
-    unsigned int pos;
+    // A label to the position of the call instruction.
+    int pos;
   };
 }
 

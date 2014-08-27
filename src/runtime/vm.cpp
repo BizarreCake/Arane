@@ -208,6 +208,22 @@ namespace arane {
             }
             break;
           
+          // push_true
+          case 0x09:
+            CHECK_STACK_SPACE(1)
+            stack[sp].type = PERL_BOOL;
+            stack[sp].val.bl = true;
+            ++ sp;
+            break;
+          
+          // push_false
+          case 0x0A:
+            CHECK_STACK_SPACE(1)
+            stack[sp].type = PERL_BOOL;
+            stack[sp].val.bl = false;
+            ++ sp;
+            break;
+          
 //------------------------------------------------------------------------------
           
           
@@ -256,24 +272,6 @@ namespace arane {
             stack[sp - 2] = p_value_concat (stack[sp - 2], stack[sp - 1], *this);
             -- sp;
             _unprotect_external (stack[sp - 1]);
-            break;
-          
-          // is_false
-          case 0x16:
-            {
-              bool v = p_value_is_false (stack[sp - 1]);
-              stack[sp - 1].type = PERL_INT;
-              stack[sp - 1].val.i64 = v ? 1 : 0;
-            }
-            break;
-          
-          // is_true
-          case 0x17:
-            {
-              bool v = p_value_is_false (stack[sp - 1]);
-              stack[sp - 1].type = PERL_INT;
-              stack[sp - 1].val.i64 = v ? 0 : 1;
-            }
             break;
           
           // ref
@@ -365,6 +363,20 @@ namespace arane {
               ptr += *((short *)ptr);
             ptr += 2;
             sp -= 2;
+            break;
+          
+          // jt - jump if true (expects a bool)
+          case 0x27:
+            if (stack[-- sp].val.bl)
+              ptr += *((short *)ptr);
+            ptr += 2;
+            break;
+          
+          // jf - jump if false (expects a bool)
+          case 0x28:
+            if (!stack[-- sp].val.bl)
+              ptr += *((short *)ptr);
+            ptr += 2;
             break;
           
 //------------------------------------------------------------------------------
@@ -569,6 +581,12 @@ namespace arane {
         // to_bint
         case 0x42:
           stack[sp - 1] = p_value_to_big_int (stack[sp - 1], *this);
+          _unprotect_external (stack[sp - 1]);
+          break;
+        
+        // to_bool
+        case 0x43:
+          stack[sp - 1] = p_value_to_bool (stack[sp - 1], *this);
           _unprotect_external (stack[sp - 1]);
           break;
         
@@ -782,7 +800,42 @@ namespace arane {
             break;
                     
 //------------------------------------------------------------------------------
-
+          
+          /* 
+           * 80-8F: Types.
+           */
+//------------------------------------------------------------------------------
+          
+          // push_type
+          case 0x80:
+            CHECK_STACK_SPACE(1)
+            stack[sp].type = PERL_TYPE;
+            stack[sp].val.typ = (p_basic_type)*ptr++;
+            ++ sp;
+            break;
+          
+          // to_compatible
+          case 0x81:
+            {
+              // number of types in type hierarchy.
+              unsigned char tc = *ptr++;
+              
+              // form a type stack
+              p_basic_type types[0x100];
+              for (unsigned int i = 0; i < tc; ++i)
+                types[i] = stack[sp - tc + i].val.typ;
+              
+              auto& val = stack[sp - tc - 1];
+              stack[sp - tc - 1] = p_value_to_compatible (val, types, tc, *this);
+              sp -= tc;
+              _unprotect_external (stack[sp - 1]);
+            }
+            break;
+          
+//------------------------------------------------------------------------------
+          
+          
+          
           /* 
            * F0-FF: Other:
            */

@@ -23,6 +23,8 @@
 #include <stack>
 #include <stdexcept>
 
+#include <iostream> // DEBUG
+
 
 namespace arane {
   
@@ -32,6 +34,10 @@ namespace arane {
   {
     this->type = type;
     this->parent = parent;
+  }
+  
+  package::~package ()
+  {
   }
   
   
@@ -147,6 +153,7 @@ namespace arane {
       .marked = false,
       .lbl = this->comp.cgen->create_label (),
       .name = name,
+      .params = {},
     });
     
     this->sub_map[name] = index;

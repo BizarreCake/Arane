@@ -19,15 +19,20 @@
 #ifndef _ARANE__COMPILER__H_
 #define _ARANE__COMPILER__H_
 
+#include "parser/ast_store.hpp"
 #include "parser/ast.hpp"
 #include "common/errors.hpp"
 #include "linker/module.hpp"
+#include "common/types.hpp"
 #include <deque>
 #include <unordered_set>
+#include <queue>
 
+#include "compiler/signatures.hpp"
 #include "compiler/package.hpp"
 #include "compiler/frame.hpp"
 #include "compiler/sub.hpp"
+#include "compiler/context.hpp"
 
 
 namespace arane {
@@ -36,6 +41,9 @@ namespace arane {
   class code_generator;
   
   
+  
+  using compile_callback = void (compiler::*) (ast_node *ast, void *extra);
+  
   /* 
    * The compiler.
    * Takes an AST tree representing a module as input, and produces a compiled
@@ -43,13 +51,48 @@ namespace arane {
    */
   class compiler
   {
+  private:
+    /* 
+     * A module relocation subject to some changes by the compiler.
+     */
+    struct c_reloc
+    {
+      relocation_type type;
+      int src;
+      int dest;
+      unsigned char size;
+      
+      int src_add;    // added to the final source offset.
+    };
+    
+    struct c_deferred
+    {
+      compilation_context *ctx;
+      int ph_lbl;
+      compile_callback cb;
+      ast_node *ast;
+      void *extra;
+    };
+    
+  private:
     friend class package;
     
     error_tracker& errs;
+    ast_store& asts;
+    signatures sigs;
+    
     std::deque<frame *> frms;
+    std::vector<frame *> all_frms;
+    
     std::deque<package *> packs;
     std::vector<package *> all_packs;
     
+    std::deque<compilation_context *> ctxs;
+    std::vector<compilation_context *> all_ctxs;
+    compilation_context *orig_ctx;
+    std::queue<c_deferred> dcomps;
+    
+    std::vector<c_reloc> relocs;
     module *mod;
     code_generator *cgen;
     std::unordered_map<std::string, unsigned int> data_str_map;
@@ -64,7 +107,7 @@ namespace arane {
       { return this->deps; }
     
   public:
-    compiler (error_tracker& errs);
+    compiler (error_tracker& errs, ast_store& asts);
     ~compiler ();
     
   public:
@@ -82,10 +125,63 @@ namespace arane {
     void push_package (package_type type, const std::string& name);
     void pop_package ();
     package& top_package ();
+    package& global_package ();
+    
+    
+    compilation_context* save_context ();
+    void restore_context (compilation_context *ctx);
+    void push_context (compilation_context *ctx);
+    void pop_context ();
+    
+    /* 
+     * Defers a compilation to the end of the compilation phase, once the
+     * entire AST tree has been analyzed.
+     * 
+     * TODO: Might be better to just run a light check on the AST tree for
+     *       any necessary information instead of deferring compilation...
+     */
+    void compile_later (compilation_context *ctx, int ph_lbl,
+      compile_callback cb, ast_node *ast, void *extra);
 
   private:
     /* 
+     * Attempts to statically deduce the type of the specified expression given
+     * the current state of the compiler.
+     */
+    type_info deduce_type (ast_expr *ast);
+    bool deduce_type_of_ident (ast_ident *ast, type_info& ti);
+    bool deduce_type_of_sub_call (ast_sub_call *ast, type_info& ti);
+    bool deduce_type_of_binop (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_add (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_sub (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_mul (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_div (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_mod (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_cmp (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_binop_concat (ast_binop *ast, type_info& ti);
+    bool deduce_type_of_conditional (ast_conditional *ast, type_info& ti);
+    bool deduce_type_of_prefix (ast_prefix *ast, type_info& ti);
+    bool deduce_type_of_postfix (ast_postfix *ast, type_info& ti);
+
+  private:
+    /* 
+     * Deferred compilation:
+     */
+//------------------------------------------------------------------------------
+
+    /* 
+     * Handles work deferred to the end of the compilation phase.
+     */
+    void handle_deferred ();
+    
+//------------------------------------------------------------------------------
+    
+  private:
+    
+    /* 
      * Inserts all required relocation entries into the compiled module.
+     * 
+     * Must be called once the code section will no longer be rearranged.
      */
     void mark_relocs ();
     
@@ -96,6 +192,18 @@ namespace arane {
     subroutine_info* find_sub (const std::string& path);
 
   private:
+    /* 
+     * Inserts a relocation.
+     * Because the code generator may rearrange the contents of the code
+     * section in any way it likes, raw offsets should not be used until the
+     * end of the compilation phase, but labels instead.
+     * 
+     * If the relocation's destination lies in the code section, the third
+     * parameter (`dest') should hold a label, otherwise a raw offset.
+     */
+    void insert_reloc (relocation_type type, int src_lbl, int dest,
+      unsigned char size, int src_add = 0);
+    
     /* 
      * Inserts the specified string into the module's data section and returns
      * its index.  If the same string has already been added, the previous
@@ -126,6 +234,7 @@ namespace arane {
     void compile_sub_call (ast_sub_call *ast);
     
     void compile_return (ast_return *ast);
+    void enforce_return_type (ast_expr *expr);
     
     void compile_if (ast_if *ast);
     
@@ -145,6 +254,8 @@ namespace arane {
     void compile_undef (ast_undef *ast);
     
     void compile_integer (ast_integer *ast);
+    
+    void compile_bool (ast_bool *ast);
     
     void compile_ident (ast_ident *ast);
     
@@ -172,13 +283,23 @@ namespace arane {
     
     void compile_conditional (ast_conditional *ast);
     
+    void compile_prefix (ast_prefix *ast);
+    void compile_prefix_inc (ast_prefix *ast);
+    void compile_prefix_dec (ast_prefix *ast);
+    void compile_prefix_str (ast_prefix *ast);
+    
+    void compile_postfix (ast_postfix *ast);
+    void compile_postfix_inc (ast_postfix *ast);
+    void compile_postfix_dec (ast_postfix *ast);
+    
     
     void compile_assign (ast_expr *lhs, ast_expr *rhs);
     void assign_to_ident (ast_ident *lhs, ast_expr *rhs);
     void assign_to_list (ast_list *lhs, ast_expr *rhs);
     void assign_to_subscript (ast_subscript *lhs, ast_expr *rhs);
     void assign_to_deref (ast_deref *lhs, ast_expr *rhs);
-    void assign_in_stack (ast_expr *lhs);
+    void assign_in_stack (ast_expr *lhs, bool keep_result);
+    void enforce_assignment_type (const type_info& lhs_type, ast_expr *rhs);
     
     
     // special subroutines:

@@ -22,6 +22,8 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <iostream> // DEBUG
+
 
 namespace arane {
   
@@ -38,6 +40,10 @@ namespace arane {
       case TOK_STRING:
       case TOK_ISTR_PART:
         delete[] tok.val.str;
+        break;
+      
+      case TOK_MORE_TOKENS:
+        delete[] tok.val.toks;
         break;
       
       default: ;
@@ -299,6 +305,7 @@ namespace arane {
       case ',': tok.typ = TOK_COMMA; return true;
       case '\\': tok.typ = TOK_BACKSLASH; return true;
       case '^': tok.typ = TOK_CARET; return true;
+      case '~': tok.typ = TOK_TILDE; return true;
       
       case '.':
         c = strm.peek ();
@@ -336,7 +343,14 @@ namespace arane {
         else if (c == '-')
           {
             strm.get ();
-            tok.typ = TOK_DEC;
+            c = strm.peek ();
+            if (c == '>')
+              {
+                strm.get ();
+                tok.typ = TOK_DLARROW;
+              }
+            else
+              tok.typ = TOK_DEC;
           }
         else
           tok.typ = TOK_SUB;
@@ -401,6 +415,21 @@ namespace arane {
         else
           tok.typ = TOK_NOT;
         return true;
+      
+      // we count :of as punctuation.
+      case ':':
+        strm.push ();
+        if (strm.get () == 'o' && strm.get () == 'f')
+          {
+            tok.typ = TOK_COF;
+            return true;
+          }
+        else
+          {
+            strm.pop ();
+            strm.unget ();
+            return false;
+          }
       
       default:
         strm.unget ();
@@ -705,9 +734,16 @@ namespace arane {
       { "package", TOK_PACKAGE },
       { "use", TOK_USE },
       { "eq", TOK_EQ_S },
+      { "of", TOK_OF },
+      
+      { "True", TOK_TRUE },
+      { "False", TOK_FALSE },
       
       { "int", TOK_TYPE_INT_NATIVE },
       { "Int", TOK_TYPE_INT },
+      { "bool", TOK_TYPE_BOOL_NATIVE },
+      { "Str", TOK_TYPE_STR },
+      { "Array", TOK_TYPE_ARRAY },
     };
     
     auto itr = _map.find (str);
@@ -736,6 +772,13 @@ namespace arane {
       {
         tok.typ = TOK_EOF;
         return tok;
+      }
+    
+    static int _t = 0;
+    ++_t;
+    if (_t == 6)
+      {
+        _t = 6;
       }
     
     if (_try_read_punctuation (strm, tok))

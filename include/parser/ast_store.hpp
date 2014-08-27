@@ -16,29 +16,39 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _ARANE__COMMON__UTILS__H_
-#define _ARANE__COMMON__UTILS__H_
+#ifndef _ARANE__PARSER__AST_STORE__H_
+#define _ARANE__PARSER__AST_STORE__H_
 
+#include "parser/ast.hpp"
+#include "common/errors.hpp"
+#include <unordered_map>
 #include <string>
 
 
 namespace arane {
   
-  namespace utils {
+  /* 
+   * Caches AST trees to avoid parsing the same file multiple times.
+   */
+  class ast_store
+  {
+    std::unordered_map<std::string, ast_program *> asts;
+    
+  public:
+    ~ast_store ();
+    
+  public:
+    /* 
+     * Parses the file located in the specified path and returns an AST tree.
+     */
+    ast_program* parse (const std::string& path, error_tracker& errs);
+    
     
     /* 
-     * Strips package names from the specified path (e.g. Turns `Foo::bar' into
-     * just `bar').
+     * Clears the cache.
      */
-    std::string strip_packages (const std::string& path);
-
-    /* 
-     * Turns a name such as 'Foo::Bar' in
-     *     use Foo::Bar;
-     * into /Foo/Bar.pm
-     */    
-    std::string module_name_to_path (const std::string& name);
-  }
+    void clear ();
+  };
 }
 
 #endif

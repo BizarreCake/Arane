@@ -10,62 +10,25 @@ Features
 The compiler is still in its early infancy, and so there's not a lot in it
 yet. But the following is currently supported:
 
-   * Arrays and strings
+   * Simple type constraints
+   * Arrays, strings, and big integers.
    * 'if' statement.
    * 'while', 'loop', and 'for' loop statements.
-   * Basic subroutines
+   * Basic subroutines (with optionally typed parameters and return value)
    * Packages and modules (all subroutines are exported at the moment)
    * A simple incremental mark-sweep garbage collector.
    
-The following code snippet is an example of what can be compiled right now:
-```perl
-package Primes {
+Here's a small code snippet that computes and prints the factorial of 100:
+```perl6
+package Foo {
   
-  #= Computes the integer square root of a number.
-  sub isqrt ($s) {
-    my $n = $s / 2;
-    for 1..15 -> $i {
-      my $m = ($n + $s/$n)/2;
-      if $m == $n {
-        return $n;
-      }
-      $n = $m;
-    }
-    return $n;
+  #= Computes N'th factorial.
+  sub fact (int $n --> Int) {
+    $n <= 1 ?? 1 !! $n * fact($n - 1)
   }
-  
-  #= Checks whether a number is prime.
-  sub is_prime ($n) {
-    for 2..isqrt($n) -> $i {
-      if $n % $i == 0 {
-        return 0;
-      }
-    }
-    return 1;
-  }
-
-  #= Generates primes number up to the specified upper bound.
-  sub gen_primes ($count) {
-    my $primes = [];
-    my $pc = 0;
-    loop (my $i = 3; $i < $count; $i = $i + 2) {
-      if is_prime $i {
-        @{$primes}[$pc] = $i;
-        $pc = $pc + 1;
-      }
-    }
-    
-    return $primes;
-  }
-} 
-
-
-my $primes = Primes::gen_primes 100;
-my @arr = @{$primes};
-for @arr -> $p {
-  print "$p ";
 }
-print "\n";
+
+say Foo::fact 100;
 ```
    
 Compiling and Running

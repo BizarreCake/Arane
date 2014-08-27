@@ -22,6 +22,7 @@
 #include "linker/executable.hpp"
 #include "runtime/value.hpp"
 #include "runtime/gc.hpp"
+#include "runtime/types.hpp"
 #include <ostream>
 #include <istream>
 #include <stdexcept>
@@ -35,6 +36,15 @@ namespace arane {
   public:
     vm_error (const std::string& str)
       : std::runtime_error (str)
+      { }
+  };
+  
+  
+  class type_error: public vm_error
+  {
+  public:
+    type_error (const std::string& str)
+      : vm_error (str)
       { }
   };
   

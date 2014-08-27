@@ -63,6 +63,8 @@ namespace arane {
     TOK_INTEGER,
     TOK_STRING,               // 'something'
     TOK_UNDEF,                // undef
+    TOK_TRUE,                 // True
+    TOK_FALSE,                // False
     
     // interpolated string stuff:
     TOK_ISTR_BEGIN,           // beginning "
@@ -79,6 +81,7 @@ namespace arane {
     TOK_RBRACKET,             // ]
     TOK_COMMA,                // ,
     TOK_DOT,                  // .
+    TOK_TILDE,                // ~
     TOK_BACKSLASH,            // \\ (one)
     TOK_DOLLAR,               // $
     TOK_AT,                   // @
@@ -86,6 +89,7 @@ namespace arane {
     TOK_CARET,                // ^
     TOK_DQ,                   // ??
     TOK_DEXC,                 // !!
+    TOK_DLARROW,              // -->
     
     // operators:
     TOK_ASSIGN,               // =
@@ -97,6 +101,8 @@ namespace arane {
     TOK_RANGE,                // ..
     TOK_INC,                  // ++
     TOK_DEC,                  // --
+    TOK_OF,                   // of
+    TOK_COF,                  // :of
     
     // comparison operators:
     TOK_EQ,                   // ==
@@ -112,8 +118,13 @@ namespace arane {
     
     // named unary operators:
     TOK_MY,
+    
+    // types
     TOK_TYPE_INT_NATIVE,
     TOK_TYPE_INT,
+    TOK_TYPE_BOOL_NATIVE,
+    TOK_TYPE_STR,
+    TOK_TYPE_ARRAY,
     
     // keywords:
     TOK_SUBROUTINE,

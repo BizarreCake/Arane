@@ -36,6 +36,34 @@ namespace arane {
       
       return path.substr (pos + 2);
     }
+    
+    
+    
+    /* 
+     * Turns a name such as 'Foo::Bar' in
+     *     use Foo::Bar;
+     * into /Foo/Bar.pm
+     */    
+    std::string
+    module_name_to_path (const std::string& name)
+    {
+      std::string path;
+      
+      // replace :: with /
+      for (size_t i = 0; i < name.length (); ++i)
+        {
+          if (name[i] == ':' && (i != name.length () - 1) && name[i + 1] == ':')
+            {
+              ++ i;
+              path.push_back ('/');
+            }
+          else
+            path.push_back (name[i]);
+        }
+      
+      path.append (".pm");
+      return path;
+    }
   }
 }
 

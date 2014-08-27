@@ -22,6 +22,7 @@
 #include "common/utils.hpp"
 #include <unordered_set>
 #include <unordered_map>
+#include <sstream>
 
 #include <iostream> // DEBUG
 
@@ -86,10 +87,10 @@ namespace arane {
               }
           }
       }
-    else if (param->get_type () == AST_TYPENAME)
+    else if (param->get_type () == AST_OF_TYPE)
       {
         count += _count_locals_needed_for_named_unop (unop,
-          (static_cast<ast_typename *> (param))->get_param (), vars);
+          (static_cast<ast_of_type *> (param))->get_expr (), vars);
       }
     else
       count += _count_locals_needed_imp (param, vars);
@@ -227,11 +228,53 @@ namespace arane {
   {
     auto expr = ast->get_expr ();
     if (expr)
-      this->compile_expr (expr);
+      {
+        this->compile_expr (expr);
+        this->enforce_return_type (expr);
+      }
     else
-      this->cgen->emit_push_undef ();
+      {
+        ast_undef undef {};
+        this->compile_expr (&undef);
+        this->enforce_return_type (&undef);
+      }
     
     this->cgen->emit_return ();
+  }
+  
+  void
+  compiler::enforce_return_type (ast_expr *expr)
+  {
+    // get the subroutine we are currently in
+    frame *frm = &this->top_frame ();
+    while (frm->get_type () != FT_SUBROUTINE)
+      frm = frm->get_parent ();
+    
+    auto& ti = frm->sub->get_return_type ();
+    if (!ti.is_none ())
+      {
+        auto dt = this->deduce_type (expr);
+        if (dt.is_none ())
+          {
+            this->cgen->emit_to_compatible (ti);
+          }
+        else
+          {
+            auto tc = dt.check_compatibility (ti);
+            if (tc == TC_INCOMPATIBLE)
+              {
+                this->errs.error (ES_COMPILER,
+                  "attempting to return a value of type `" + dt.str () + "'"
+                  " when subroutine is expected to return `" + ti.str () + "'",
+                  expr->get_line (), expr->get_column ());
+                return;
+              }
+            else if (tc == TC_CASTABLE)
+              {
+                this->cgen->emit_to_compatible (ti);
+              }
+          }
+      }
   }
   
   
@@ -343,6 +386,20 @@ namespace arane {
   
   
   
+  /* 
+   * Subroutine calls:
+   */
+//------------------------------------------------------------------------------
+  
+  namespace {
+    
+    struct sc_extra_t {
+      package *pack;
+      std::string name;
+    };
+  }
+  
+  
   static bool
   _is_builtin (const std::string& name)
   {
@@ -373,14 +430,6 @@ namespace arane {
         return;
       }
     
-    // parameters (push in reverse order)
-    auto& params = ast->get_params ()->get_elems ();
-    for (auto itr = params.rbegin (); itr != params.rend (); ++itr)
-      {
-        auto param = *itr;
-        this->compile_expr (param);
-      }
-    
     auto itr = _ssub_map.find (name);
     if (itr != _ssub_map.end ())
       {
@@ -389,6 +438,14 @@ namespace arane {
       }
     else if (_is_builtin (name))
       {
+        // parameters (push in reverse order)
+        auto& params = ast->get_params ()->get_elems ();
+        for (auto itr = params.rbegin (); itr != params.rend (); ++itr)
+          {
+            auto param = *itr;
+            this->compile_expr (param);
+          }
+        
         // builtin
         this->cgen->emit_call_builtin (name, params.size ());
       }
@@ -397,7 +454,6 @@ namespace arane {
         // find the package the subroutine's in, starting with the topmost
         // one, going down.
         
-        std::string abs_path; // absolute path
         package *pack = &this->top_package ();
         while (pack)
           {
@@ -407,39 +463,111 @@ namespace arane {
             else
               {
                 // turn relative name into absolute path.
+                std::string abs_path;
                 package *sp = pack->get_subpackage_containing (name);
                 abs_path = sp->get_path ();
                 if (!abs_path.empty ())
                   abs_path.append ("::");
                 abs_path.append (utils::strip_packages (s->name));
+                name = abs_path;
                 break;
               }
           }
         
+        auto sig = this->sigs.find_sub (name);
+        if (!sig)
+          {
+            this->errs.error (ES_COMPILER, "call to subroutine `" + name + "' "
+              "whose signature is not known", ast->get_line (), ast->get_column ());
+            return;
+          }
+        
+        auto& params = ast->get_params ()->get_elems ();
+        if (params.size () != sig->params.size ())
+          {
+            std::stringstream ss;
+            ss << "subroutine `" << sig->name << "' expects " << sig->params.size ()
+              << " parameter(s), " << params.size () << " given.";
+            this->errs.error (ES_COMPILER, ss.str (), ast->get_line (),
+              ast->get_column ());
+            return;
+          }
+        
+        // compile parameters
+        for (unsigned int i = 0; i < params.size (); ++i)
+          {
+            auto param = params[i];
+            this->compile_expr (param);
+            
+            // if the type is not known beforehand, defer the checking
+            // to runtime.
+            auto& ti = sig->params[i].ti;
+            if (!ti.is_none ())
+              {
+                auto dt = this->deduce_type (param);
+                if (dt.is_none ())  // deduction failed
+                  {
+                    // cast to compatible type, or die.
+                    this->cgen->emit_to_compatible (ti);
+                  }
+                else
+                  {
+                    // check for incompatible types
+                    auto tc = dt.check_compatibility (ti);
+                    if (tc == TC_INCOMPATIBLE)
+                      {
+                        this->errs.error (ES_COMPILER,
+                          "attempting to pass a parameter of an incompatible"
+                          " type `" + dt.str () + "' where `" + ti.str () + "'"
+                          " is expected", param->get_line (), param->get_column ());
+                        return;
+                      }
+                    else if (tc == TC_CASTABLE)
+                      {
+                        // an cast is still needed
+                        this->cgen->emit_to_compatible (ti);
+                      }
+                  }
+              }
+          }
+        
+        // call instruction
         if (pack)
           {
-            this->sub_uses.push_back ({
-              .name = abs_path,
-              .ast  = ast,
-              .pos  = this->cgen->get_buffer ().get_pos (),
-            });
+            subroutine_info& sub = this->global_package ().get_sub (name);
             
-            auto& sub = this->packs.front ()->get_sub (abs_path);
+            int call_lbl = this->cgen->create_and_mark_label ();
             this->cgen->emit_call (sub.lbl, params.size ());
-          }
-        else
-          {
+            
             this->sub_uses.push_back ({
               .name = name,
               .ast  = ast,
-              .pos  = this->cgen->get_buffer ().get_pos (),
+              .pos  = call_lbl,
             });
+          }
+        else
+          {
+            // Most likely an imported sub.
+            // If so, just leave an empty call instruction which will be updated
+            // by the linker.
+            int call_lbl = this->cgen->create_and_mark_label ();
+            {
+              auto& buf = cgen->get_buffer ();
+              buf.put_byte (0x71);
+              buf.put_int (0);
+              buf.put_byte (params.size ());
+            }
             
-            // if it's an import, it will be replaced by the linker.
-            this->cgen->emit_call (0, params.size ());
+            this->sub_uses.push_back ({
+              .name = name,
+              .ast  = ast,
+              .pos  = call_lbl,
+            });
           }
       }
   }
+  
+//------------------------------------------------------------------------------
   
   
   
@@ -457,15 +585,16 @@ namespace arane {
     // create new frame
     this->push_frame (FT_SUBROUTINE);
     frame& frm = this->top_frame ();
+    frm.sub = ast;
     
     // jump over the subroutine.
     int lbl_over = this->cgen->create_label ();
     this->cgen->emit_jmp (lbl_over);
     
     // mark the subroutine as generated, and handle redeclarations.
+    package& pack = this->top_package ();
+    auto& sub = pack.get_sub (name);
     {
-      package& pack = this->top_package ();
-      auto& sub = pack.get_sub (name);
       if (sub.marked)
         {
           this->errs.error (ES_COMPILER, "redeclaration of subroutine `" +
@@ -483,6 +612,8 @@ namespace arane {
         }
     }
     
+    sub.ret_ti = ast->get_return_type ();
+    
     unsigned int loc_count = _count_locals_needed (body);
     this->cgen->emit_push_frame (loc_count);
     
@@ -496,12 +627,16 @@ namespace arane {
           {
           case AST_IDENT:
             frm.add_arg ((static_cast<ast_ident *> (expr))->get_name ());
+            sub.params.push_back ({
+              .name = (static_cast<ast_ident *> (expr))->get_name (),
+              .type = type_info::none (),
+            });
             break;
           
-          case AST_TYPENAME:
+          case AST_OF_TYPE:
             {
-              ast_typename *tn = static_cast<ast_typename *> (expr);
-              if (tn->get_param ()->get_type () != AST_IDENT)
+              ast_of_type *tn = static_cast<ast_of_type *> (expr);
+              if (tn->get_expr ()->get_type () != AST_IDENT)
                 {
                   this->errs.error (ES_COMPILER, "expected an identifier after "
                     "type name in subroutine parameter list", tn->get_line (),
@@ -509,16 +644,12 @@ namespace arane {
                   return;
                 }
               
-              ast_ident *ident = static_cast<ast_ident *> (tn->get_param ());
-              switch (tn->get_op ())
-                {
-                case AST_TN_INT:
-                  frm.add_arg (ident->get_name (), VT_INT);
-                  break;
-                case AST_TN_INT_NATIVE:
-                  frm.add_arg (ident->get_name (), VT_INT_NATIVE);
-                  break;
-                }
+              ast_ident *ident = static_cast<ast_ident *> (tn->get_expr ());
+              frm.add_arg (ident->get_name (), tn->get_typeinfo ());
+              sub.params.push_back ({
+                .name = ident->get_name (),
+                .type = tn->get_typeinfo (),
+              });
             }
             break;
           
@@ -541,6 +672,7 @@ namespace arane {
               {
                 auto expr = (static_cast<ast_expr_stmt *> (stmt))->get_expr ();
                 this->compile_expr (expr);
+                this->enforce_return_type (expr);
                 this->cgen->emit_return ();
               }
             else

@@ -19,6 +19,7 @@
 #ifndef _ARANE__AST__H_
 #define _ARANE__AST__H_
 
+#include "common/types.hpp"
 #include <vector>
 #include <string>
 
@@ -30,6 +31,7 @@ namespace arane {
     AST_UNDEF,
     AST_IDENT,
     AST_INTEGER,
+    AST_BOOL,
     AST_STRING,
     AST_INTERP_STRING,
     AST_LIST,
@@ -54,8 +56,10 @@ namespace arane {
     AST_MODULE,
     AST_PACKAGE,
     AST_USE,
-    AST_TYPENAME,
     AST_CONDITIONAL,
+    AST_OF_TYPE,
+    AST_PREFIX,
+    AST_POSTFIX,
   };
   
   
@@ -192,6 +196,23 @@ namespace arane {
     
   public:
     ast_integer (long long val);
+  };
+  
+  
+  /* 
+   * A boolean value.
+   */
+  class ast_bool: public ast_expr
+  {
+    bool val;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_BOOL; }
+    
+    inline bool get_value () const { return this->val; }
+    
+  public:
+    ast_bool (bool val);
   };
   
   
@@ -395,29 +416,6 @@ namespace arane {
   };
   
   
-  enum ast_typename_type
-  {
-    AST_TN_INT_NATIVE,      // int
-    AST_TN_INT,             // Int
-  };
-  
-  class ast_typename: public ast_expr
-  {
-    ast_typename_type type;
-    ast_expr *param;
-    
-  public:
-    virtual ast_type get_type () const override { return AST_TYPENAME; }
-    
-    inline ast_typename_type get_op () const { return this->type; }
-    inline ast_expr* get_param () { return this->param; }
-    
-  public:
-    ast_typename (ast_typename_type type, ast_expr *param = nullptr);
-    ~ast_typename ();
-  };
-  
-  
   struct ast_sub_param
   {
     ast_expr *expr;
@@ -431,6 +429,7 @@ namespace arane {
     std::string name;
     std::vector<ast_sub_param> params;
     ast_block *body;
+    type_info ret_type;
     
   public:
     virtual ast_type get_type () const override { return AST_SUB; }
@@ -438,6 +437,7 @@ namespace arane {
     inline const std::string& get_name () const { return this->name; }
     inline std::vector<ast_sub_param>& get_params () { return this->params; }
     inline ast_block* get_body () { return this->body; }
+    inline const type_info& get_return_type () { return this->ret_type; }
     
   public:
     ast_sub (const std::string& name);
@@ -446,6 +446,8 @@ namespace arane {
   public:
     void add_param (ast_expr *param);
     void set_body (ast_block *block);
+    
+    void set_return_type (const type_info& ti);
   };
   
   
@@ -455,14 +457,16 @@ namespace arane {
   class ast_return: public ast_stmt
   {
     ast_expr *expr;
+    bool implicit;
     
   public:
     virtual ast_type get_type () const override { return AST_RETURN; }
     
     inline ast_expr* get_expr () { return this->expr; }
+    inline bool is_implicit () const { return this->implicit; }
     
   public:
-    ast_return (ast_expr *expr = nullptr);
+    ast_return (ast_expr *expr = nullptr, bool implicit = false);
     ~ast_return ();
   };
   
@@ -745,6 +749,88 @@ namespace arane {
   public:
     ast_conditional (ast_expr *test, ast_expr *conseq, ast_expr *alt);
     ~ast_conditional ();
+  };
+  
+  
+  
+  /*
+   * Associates an expression with a type.
+   * <expr>:of(<type>)
+   * <expr> of <type>
+   */
+  class ast_of_type: public ast_expr
+  {
+    ast_expr *expr;
+    type_info ti;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_OF_TYPE; }
+    
+    inline ast_expr* get_expr () { return this->expr; }
+    inline const type_info& get_typeinfo () { return this->ti; }
+    
+  public:
+    ast_of_type (ast_expr *expr, const type_info& ti);
+    ~ast_of_type ();
+  };
+  
+  
+  /* 
+   * Unary operator.
+   */
+  class ast_unop: public ast_expr
+  {
+    ast_expr *expr;
+    
+  public:
+    inline ast_expr* get_expr () { return this->expr; }
+    
+  public:
+    ast_unop (ast_expr *expr);
+    ~ast_unop ();
+  };
+  
+  
+  
+  enum ast_prefix_type
+  {
+    AST_PREFIX_INC,       // ++<expr>
+    AST_PREFIX_DEC,       // --<expr>
+    AST_PREFIX_STR,       // ~<expr>
+  };
+  
+  class ast_prefix: public ast_unop
+  {
+    ast_prefix_type op;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_PREFIX; }
+    
+    inline ast_prefix_type get_op () const { return this->op; }
+    
+  public:
+    ast_prefix (ast_expr *expr, ast_prefix_type op);
+  };
+  
+  
+  
+  enum ast_postfix_type
+  {
+    AST_POSTFIX_INC,       // <expr>++
+    AST_POSTFIX_DEC,       // <expr>--
+  };
+  
+  class ast_postfix: public ast_unop
+  {
+    ast_postfix_type op;
+    
+  public:
+    virtual ast_type get_type () const override { return AST_POSTFIX; }
+  
+    inline ast_postfix_type get_op () const { return this->op; }
+    
+  public:
+    ast_postfix (ast_expr *expr, ast_postfix_type op);
   };
 }
 

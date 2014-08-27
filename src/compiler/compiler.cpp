@@ -21,23 +21,28 @@
 #include "compiler/frame.hpp"
 
 #include <iostream> // DEBUG
+#include <fstream> // DEBUG
 
 
 namespace arane {
   
-  compiler::compiler (error_tracker& errs)
-    : errs (errs)
+  compiler::compiler (error_tracker& errs, ast_store& asts)
+    : errs (errs), asts (asts), sigs (asts)
   {
     this->mod = nullptr;
     this->cgen = nullptr;
+    this->orig_ctx = nullptr;
   }
   
   compiler::~compiler ()
   {
-    while (!this->frms.empty ())
-      this->pop_frame ();
+    for (frame *f : this->all_frms)
+      delete f;
     for (package *p : this->all_packs)
       delete p;
+    for (compilation_context *ctx : this->all_ctxs)
+      delete ctx;
+    delete this->orig_ctx;
     
     delete this->cgen;
   }
@@ -55,13 +60,12 @@ namespace arane {
     frame *frm = new frame (type,
       this->frms.empty () ? nullptr : this->frms.back ());
     this->frms.push_back (frm);
+    this->all_frms.push_back (frm);
   }
   
   void
   compiler::pop_frame ()
   {
-    frame *frm = this->frms.back ();
-    delete frm;
     this->frms.pop_back ();
   }
   
@@ -96,9 +100,108 @@ namespace arane {
     return *this->packs.back ();
   }
   
+  package&
+  compiler::global_package ()
+  {
+    return *this->packs.front ();
+  }
+  
+  
+  
+  compilation_context*
+  compiler::save_context ()
+  {
+    compilation_context *ctx = new compilation_context ();
+    
+    ctx->frms = this->frms;
+    ctx->packs = this->packs;
+    
+    this->all_ctxs.push_back (ctx);
+    return ctx;
+  }
+  
+  void
+  compiler::restore_context (compilation_context *ctx)
+  {
+    this->frms = ctx->frms;
+    this->packs = ctx->packs;
+  }
+  
+  void
+  compiler::push_context (compilation_context *ctx)
+  {
+    if (this->ctxs.empty ())
+      {
+        // save original context
+        this->orig_ctx = this->save_context ();
+      }
+    
+    this->restore_context (ctx);
+    this->ctxs.push_back (ctx);
+  }
+  
+  void
+  compiler::pop_context ()
+  {
+    this->ctxs.pop_back ();
+    if (this->ctxs.empty ())
+      {
+        this->restore_context (this->orig_ctx);
+        this->orig_ctx = nullptr;
+      }
+    else
+      this->restore_context (this->ctxs.back ()); // restore previous context
+  }
+  
+  
+  
+  /* 
+   * Defers a compilation to the end of the compilation phase, once the
+   * entire AST tree has been analyzed.
+   * 
+   * TODO: Might be better to just run a light check on the AST tree for
+   *       any necessary information instead of deferring compilation...
+   */
+  void
+  compiler::compile_later (compilation_context *ctx, int ph_lbl,
+    compile_callback cb, ast_node *ast, void *extra)
+  {
+    this->dcomps.push ({
+      .ctx = ctx,
+      .ph_lbl = ph_lbl,
+      .cb = cb,
+      .ast = ast,
+      .extra = extra,
+    });
+  }
+  
   
   
 //------------------------------------------------------------------------------
+  
+  /* 
+   * Inserts a relocation.
+   * Because the code generator may rearrange the contents of the code
+   * section in any way it likes, raw offsets should not be used until the
+   * end of the compilation phase, but labels instead.
+   * 
+   * If the relocation's destination lies in the code section, the third
+   * parameter (`dest') should hold a label, otherwise a raw offset.
+   */
+  void
+  compiler::insert_reloc (relocation_type type, int src_lbl, int dest,
+    unsigned char size, int src_add)
+  {
+    c_reloc reloc {
+      .type = type,
+      .src = src_lbl,
+      .dest = dest,
+      .size = size,
+      .src_add = src_add,
+    };
+    
+    this->relocs.push_back (reloc);
+  }
   
   /* 
    * Inserts the specified string into the module's data section and returns
@@ -162,27 +265,74 @@ namespace arane {
   
   
   /* 
+   * Handles work deferred to the end of the compilation phase.
+   */
+  void
+  compiler::handle_deferred ()
+  {
+    while (!this->dcomps.empty ())
+      {
+        auto dc = this->dcomps.front ();
+        this->dcomps.pop ();
+        
+        this->push_context (dc.ctx);
+        
+        this->cgen->move_to_label (dc.ph_lbl);
+        this->cgen->placeholder_start ();
+        (this->* dc.cb) (dc.ast, dc.extra);
+        this->cgen->placeholder_end ();
+        
+        this->pop_context ();
+      }
+  }
+  
+  
+  
+  /* 
    * Inserts all required relocation entries into the compiled module.
+   * 
+   * Must be called once the code section will no longer be rearranged.
    */
   void
   compiler::mark_relocs ()
   {
-    for (auto suse : this->sub_uses)
+    for (subroutine_use& suse : this->sub_uses)
       {
         subroutine_info *sub = this->find_sub (suse.name);
         if (sub && sub->marked)
           {
-            this->mod->add_reloc ({
-              .type = REL_CODE,
-              .pos  = suse.pos + 1,    // skip the opcode
-              .dest = (unsigned int)this->cgen->get_label_pos (sub->lbl),
-              .size = 4,
-            });
+            this->insert_reloc (REL_CODE, suse.pos, sub->lbl, 4,
+              1 /* skip opcode */);
           }
         else
           {
-            this->mod->import_sub (suse.name, suse.pos + 1, // skip the opcode
+            this->mod->import_sub (suse.name,
+              this->cgen->get_label_pos (suse.pos) + 1, // skip the opcode
               suse.ast->get_line (), suse.ast->get_column ());
+          }
+      }
+    
+    for (c_reloc rel : this->relocs)
+      {
+        switch (rel.type)
+          {
+          case REL_CODE:
+            this->mod->add_reloc ({
+              .type = REL_CODE,
+              .pos = (unsigned int)(this->cgen->get_label_pos (rel.src) + rel.src_add),
+              .dest = (unsigned int)this->cgen->get_label_pos (rel.dest),
+              .size = rel.size
+            });
+            break;
+          
+          case REL_DATA_CSTR:
+            this->mod->add_reloc ({
+              .type = REL_DATA_CSTR,
+              .pos = (unsigned int)(this->cgen->get_label_pos (rel.src) + rel.src_add),
+              .dest = (unsigned int)rel.dest,
+              .size = rel.size
+            });
+            break;
           }
       }
   }
@@ -198,10 +348,17 @@ namespace arane {
     // GLOBAL package
     this->push_package (PT_PACKAGE, "GLOBAL");
     
+    this->sigs.parse (program);
+    
     ast_sub *sub = static_cast<ast_sub *> (program);
     this->compile_sub (sub);
     
+    //this->emit_sub_calls ();
+    this->handle_deferred ();
+    this->mark_relocs ();
+    
     auto& inf = *this->find_sub ("#PROGRAM");
+    this->cgen->seek_to_end ();
     this->cgen->emit_call (inf.lbl, 0);
     this->mod->add_reloc ({
       .type = REL_CODE,
@@ -209,8 +366,6 @@ namespace arane {
       .dest = (unsigned int)this->cgen->get_label_pos (inf.lbl),
       .size = 4,
     });
-    
-    this->mark_relocs ();
     
     this->pop_package ();
   }

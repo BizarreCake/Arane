@@ -62,6 +62,7 @@ namespace arane {
     
   public:
     package (compiler& comp, package_type type, const std::string& name, package *parent);
+    ~package ();
     
   public:
     /* 

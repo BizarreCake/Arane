@@ -97,6 +97,15 @@ namespace arane {
   
 //------------------------------------------------------------------------------
   
+  ast_bool::ast_bool (bool val)
+  {
+    this->val = val;
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
   ast_string::ast_string (const std::string& str)
     : str (str)
     { }
@@ -228,6 +237,7 @@ namespace arane {
     : name (name)
   {
     this->body = nullptr;
+    this->ret_type = type_info::none ();
   }
   
   ast_sub::~ast_sub ()
@@ -253,13 +263,20 @@ namespace arane {
     this->body = block;
   }
   
+  void
+  ast_sub::set_return_type (const type_info& ti)
+  {
+    this->ret_type = ti;
+  }
+  
   
   
 //------------------------------------------------------------------------------
   
-  ast_return::ast_return (ast_expr *expr)
+  ast_return::ast_return (ast_expr *expr, bool implicit)
   {
     this->expr = expr;
+    this->implicit = implicit;
   }
   
   ast_return::~ast_return ()
@@ -440,21 +457,6 @@ namespace arane {
   
 //------------------------------------------------------------------------------
   
-  ast_typename::ast_typename (ast_typename_type type, ast_expr *param)
-  {
-    this->type = type;
-    this->param = param;
-  }
-  
-  ast_typename::~ast_typename ()
-  {
-    delete this->param;
-  }
-  
-  
-  
-//------------------------------------------------------------------------------
-  
   ast_conditional::ast_conditional (ast_expr *test, ast_expr *conseq, ast_expr *alt)
   {
     this->test = test;
@@ -467,6 +469,55 @@ namespace arane {
     delete this->test;
     delete this->conseq;
     delete this->alt;
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_of_type::ast_of_type (ast_expr *expr, const type_info& ti)
+    : ti (ti)
+  {
+    this->expr = expr;
+  }
+  
+  ast_of_type::~ast_of_type ()
+  {
+    delete this->expr;
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_unop::ast_unop (ast_expr *expr)
+  {
+    this->expr = expr;
+  }
+  
+  ast_unop::~ast_unop ()
+  {
+    delete this->expr;
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_prefix::ast_prefix (ast_expr *expr, ast_prefix_type op)
+    : ast_unop (expr)
+  {
+    this->op = op;
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_postfix::ast_postfix (ast_expr *expr, ast_postfix_type op)
+    : ast_unop (expr)
+  {
+    this->op = op;
   }
 }
 
