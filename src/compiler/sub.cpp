@@ -493,8 +493,8 @@ namespace arane {
             return;
           }
         
-        // compile parameters
-        for (unsigned int i = 0; i < params.size (); ++i)
+        // compile parameters in reverse order
+        for (int i = params.size () - 1; i >= 0; --i)
           {
             auto param = params[i];
             this->compile_expr (param);

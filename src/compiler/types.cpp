@@ -95,7 +95,7 @@ namespace arane {
       return false;
     
     if (lhs_type.types[0].type == TYPE_INT ||
-        rhs_type.types[1].type == TYPE_INT)
+        rhs_type.types[0].type == TYPE_INT)
       {
         ti.push_basic (TYPE_INT);
         return true;
@@ -124,7 +124,7 @@ namespace arane {
       return false;
     
     if (lhs_type.types[0].type == TYPE_INT ||
-        rhs_type.types[1].type == TYPE_INT)
+        rhs_type.types[0].type == TYPE_INT)
       {
         ti.push_basic (TYPE_INT);
         return true;
@@ -153,7 +153,7 @@ namespace arane {
       return false;
     
     if (lhs_type.types[0].type == TYPE_INT ||
-        rhs_type.types[1].type == TYPE_INT)
+        rhs_type.types[0].type == TYPE_INT)
       {
         ti.push_basic (TYPE_INT);
         return true;
@@ -182,7 +182,7 @@ namespace arane {
       return false;
     
     if (lhs_type.types[0].type == TYPE_INT ||
-        rhs_type.types[1].type == TYPE_INT)
+        rhs_type.types[0].type == TYPE_INT)
       {
         ti.push_basic (TYPE_INT);
         return true;
@@ -211,7 +211,7 @@ namespace arane {
       return false;
     
     if (lhs_type.types[0].type == TYPE_INT ||
-        rhs_type.types[1].type == TYPE_INT)
+        rhs_type.types[0].type == TYPE_INT)
       {
         ti.push_basic (TYPE_INT);
         return true;
@@ -350,6 +350,10 @@ namespace arane {
       {
       case AST_INTEGER:
         ti.push_basic (TYPE_INT_NATIVE);
+        return ti;
+      
+      case AST_BOOL:
+        ti.push_basic (TYPE_BOOL_NATIVE);
         return ti;
       
       case AST_STRING:

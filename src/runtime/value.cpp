@@ -139,6 +139,18 @@ namespace arane {
           }
         break;
       
+      // to bool
+      case PTYPE_BOOL_NATIVE:
+        switch (a.type)
+          {
+          case PERL_BOOL:
+            return a;
+          
+          default:
+            THROW_TYPE_ERROR
+          }
+        break;
+      
       // to Str
       case PTYPE_STR:
         switch (a.type)
