@@ -22,7 +22,7 @@ Here's a small code snippet that computes and prints the factorial of 100:
 ```perl6
 package Foo {
   
-  #= Computes N'th factorial.
+  # Computes N'th factorial.
   sub fact (int $n --> Int) {
     $n <= 1 ?? 1 !! $n * fact($n - 1)
   }
