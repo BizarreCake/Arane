@@ -97,6 +97,11 @@ namespace arane {
      * Returns the AST node's type.
      */
     virtual ast_type get_type () const = 0;
+    
+    /* 
+     * Performs a deep copy of the AST node.
+     */
+    virtual ast_node* clone () = 0;
   };
   
   
@@ -130,6 +135,8 @@ namespace arane {
   public:
     ast_expr_stmt (ast_expr *expr);
     ~ast_expr_stmt ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -148,6 +155,8 @@ namespace arane {
     
   public:
     ~ast_block ();
+    
+    virtual ast_node* clone () override;
     
   public:
     void add_stmt (ast_stmt *stmt);
@@ -182,6 +191,8 @@ namespace arane {
     
   public:
     ast_ident (const std::string& name, ast_ident_type type);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -189,6 +200,8 @@ namespace arane {
   {
   public:
     virtual ast_type get_type () const override { return AST_UNDEF; }
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -206,6 +219,8 @@ namespace arane {
     
   public:
     ast_integer (long long val);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -223,6 +238,8 @@ namespace arane {
     
   public:
     ast_bool (bool val);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -240,6 +257,8 @@ namespace arane {
     
   public:
     ast_string (const std::string& str);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -274,6 +293,8 @@ namespace arane {
   public:
     ~ast_interp_string ();
     
+    virtual ast_node* clone () override;
+    
   public:
     void add_part (const std::string& str);
     void add_expr (ast_expr *expr);
@@ -297,6 +318,8 @@ namespace arane {
   public:
     ~ast_list ();
     
+    virtual ast_node* clone () override;
+    
   public:
     void add_elem (ast_expr *expr);
   };
@@ -309,6 +332,8 @@ namespace arane {
   {
   public:
     virtual ast_type get_type () const override { return AST_ANONYM_ARRAY; }
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -329,6 +354,8 @@ namespace arane {
   public:
     ast_subscript (ast_expr *expr, ast_expr *index);
     ~ast_subscript ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -372,6 +399,8 @@ namespace arane {
   public:
     ast_binop (ast_expr *lhs, ast_expr *rhs, ast_binop_type type);
     ~ast_binop ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -392,6 +421,8 @@ namespace arane {
   public:
     ast_sub_call (const std::string& name, ast_list *params);
     ~ast_sub_call ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -423,6 +454,8 @@ namespace arane {
   public:
     ast_named_unop (ast_unop_type type, ast_expr *param);
     ~ast_named_unop ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -453,6 +486,8 @@ namespace arane {
     ast_sub (const std::string& name);
     ~ast_sub ();
     
+    virtual ast_node* clone () override;
+    
   public:
     void add_param (ast_expr *param);
     void set_body (ast_block *block);
@@ -478,6 +513,8 @@ namespace arane {
   public:
     ast_return (ast_expr *expr = nullptr, bool implicit = false);
     ~ast_return ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -538,6 +575,8 @@ namespace arane {
     ast_if (ast_expr *cond, ast_block *body);
     ~ast_if ();
     
+    virtual ast_node* clone () override;
+    
   public:
     void add_elsif (ast_expr *cond, ast_block *body);
     void add_else (ast_block *body);
@@ -559,6 +598,8 @@ namespace arane {
   public:
     ast_ref (ast_expr *expr);
     ~ast_ref ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -577,6 +618,8 @@ namespace arane {
   public:
     ast_deref (ast_expr *expr);
     ~ast_deref ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -599,6 +642,8 @@ namespace arane {
   public:
     ast_while (ast_expr *cond, ast_block *body);
     ~ast_while ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -623,6 +668,8 @@ namespace arane {
   public:
     ast_for (ast_expr *arg, ast_ident *var, ast_block *body);
     ~ast_for ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -647,6 +694,8 @@ namespace arane {
   public:
     ast_range (ast_expr *lhs, bool lhs_exc, ast_expr *rhs, bool rhs_exc);
     ~ast_range ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -679,6 +728,8 @@ namespace arane {
   public:
     ast_loop (ast_block *body, ast_expr *init, ast_expr *cond, ast_expr *step);
     ~ast_loop ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -704,6 +755,8 @@ namespace arane {
   public:
     ast_package (const std::string& name, ast_block *body);
     ~ast_package ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -718,6 +771,8 @@ namespace arane {
     
   public:
     ast_module (const std::string& name, ast_block *body);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -736,6 +791,8 @@ namespace arane {
     
   public:
     ast_use (const std::string& what);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -759,6 +816,8 @@ namespace arane {
   public:
     ast_conditional (ast_expr *test, ast_expr *conseq, ast_expr *alt);
     ~ast_conditional ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -782,6 +841,8 @@ namespace arane {
   public:
     ast_of_type (ast_expr *expr, const type_info& ti);
     ~ast_of_type ();
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -820,6 +881,8 @@ namespace arane {
     
   public:
     ast_prefix (ast_expr *expr, ast_prefix_type op);
+    
+    virtual ast_node* clone () override;
   };
   
   
@@ -841,6 +904,8 @@ namespace arane {
     
   public:
     ast_postfix (ast_expr *expr, ast_postfix_type op);
+    
+    virtual ast_node* clone () override;
   };
 }
 

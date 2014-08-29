@@ -1212,7 +1212,7 @@ namespace arane {
     return PC_NONE;
   }
   
-  // binary ops:  =
+  // binary ops:  = += -= *= /= %= ~=
   static ast_expr*
   _parse_expr_1 (parser_state& ps)
   {
@@ -1223,18 +1223,58 @@ namespace arane {
       return nullptr;
     
     token tok = toks.peek_next ();
-    if (tok.typ == TOK_ASSIGN)
+    switch (tok.typ)
       {
-        toks.next ();
-        
-        context_block ctxb { ps, _context_from_assign_lhs (left.get(), ps) };
-        std::unique_ptr<ast_expr> right { _parse_expr_1 (ps) };
-        if (!right.get ())
-          return nullptr;
-        
-        auto binop = new ast_binop (left.release (), right.release (), AST_BINOP_ASSIGN);
-        binop->set_pos (tok.ln, tok.col);
-        return binop;
+      case TOK_ASSIGN:
+        {
+          toks.next ();
+          
+          context_block ctxb { ps, _context_from_assign_lhs (left.get(), ps) };
+          std::unique_ptr<ast_expr> right { _parse_expr_1 (ps) };
+          if (!right.get ())
+            return nullptr;
+          
+          auto binop = new ast_binop (left.release (), right.release (), AST_BINOP_ASSIGN);
+          binop->set_pos (tok.ln, tok.col);
+          return binop;
+        }
+      
+      case TOK_ADD_ASSIGN:
+      case TOK_SUB_ASSIGN:
+      case TOK_MUL_ASSIGN:
+      case TOK_DIV_ASSIGN:
+      case TOK_MOD_ASSIGN:
+      case TOK_TILDE_ASSIGN:
+        {
+          ast_binop_type op;
+          switch (toks.next ().typ)
+            {
+            case TOK_ADD_ASSIGN:      op = AST_BINOP_ADD; break;
+            case TOK_SUB_ASSIGN:      op = AST_BINOP_SUB; break;
+            case TOK_MUL_ASSIGN:      op = AST_BINOP_MUL; break;
+            case TOK_DIV_ASSIGN:      op = AST_BINOP_DIV; break;
+            case TOK_MOD_ASSIGN:      op = AST_BINOP_MOD; break;
+            case TOK_TILDE_ASSIGN:    op = AST_BINOP_CONCAT; break;
+            
+            default:
+              throw std::runtime_error ("invalid op-assign type");
+            }
+          
+          context_block ctxb { ps, _context_from_assign_lhs (left.get(), ps) };
+          std::unique_ptr<ast_expr> right { _parse_expr_1 (ps) };
+          if (!right.get ())
+            return nullptr;
+          
+          auto binop = new ast_binop (
+            static_cast<ast_expr *> (left.get ()->clone ()), right.release (), op);
+          binop->set_pos (tok.ln, tok.col);
+          
+          auto ast = new ast_binop (left.release (), binop, AST_BINOP_ASSIGN);
+          ast->set_pos (tok.ln, tok.col);
+          return ast;
+        }
+      
+      default: ;
       }
     
     return left.release ();

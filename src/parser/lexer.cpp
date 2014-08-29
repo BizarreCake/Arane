@@ -305,7 +305,17 @@ namespace arane {
       case ',': tok.typ = TOK_COMMA; return true;
       case '\\': tok.typ = TOK_BACKSLASH; return true;
       case '^': tok.typ = TOK_CARET; return true;
-      case '~': tok.typ = TOK_TILDE; return true;
+      
+      case '~':
+        c = strm.peek ();
+        if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_TILDE_ASSIGN;
+          }
+        else
+          tok.typ = TOK_TILDE;
+        return true;
       
       case '.':
         c = strm.peek ();
@@ -325,13 +335,47 @@ namespace arane {
             strm.get ();
             tok.typ = TOK_INC;
           }
+        else if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_ADD_ASSIGN;
+          }
         else
           tok.typ = TOK_ADD;
         return true;
       
-      case '*': tok.typ = TOK_MUL; return true;
-      case '/': tok.typ = TOK_DIV; return true;
-      case '%': tok.typ = TOK_MOD; return true;
+      case '*':
+        c = strm.peek ();
+        if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_MUL_ASSIGN;
+          }
+        else
+          tok.typ = TOK_MUL;
+        return true;
+      
+      case '/':
+        c = strm.peek ();
+        if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_DIV_ASSIGN;
+          }
+        else
+          tok.typ = TOK_DIV;
+        return true;
+      
+      case '%':
+        c = strm.peek ();
+        if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_MOD_ASSIGN;
+          }
+        else
+          tok.typ = TOK_MOD;
+        return true;
       
       case '-':
         c = strm.peek ();
@@ -351,6 +395,11 @@ namespace arane {
               }
             else
               tok.typ = TOK_DEC;
+          }
+        else if (c == '=')
+          {
+            strm.get ();
+            tok.typ = TOK_SUB_ASSIGN;
           }
         else
           tok.typ = TOK_SUB;

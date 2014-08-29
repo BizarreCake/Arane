@@ -103,6 +103,12 @@ namespace arane {
     TOK_DEC,                  // --
     TOK_OF,                   // of
     TOK_COF,                  // :of
+    TOK_ADD_ASSIGN,           // +=
+    TOK_SUB_ASSIGN,           // -=
+    TOK_MUL_ASSIGN,           // *=
+    TOK_DIV_ASSIGN,           // /=
+    TOK_MOD_ASSIGN,           // %=
+    TOK_TILDE_ASSIGN,         // ~=
     
     // comparison operators:
     TOK_EQ,                   // ==

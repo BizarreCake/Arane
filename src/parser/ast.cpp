@@ -44,6 +44,22 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_expr_stmt::clone ()
+  {
+    return new ast_expr_stmt (static_cast<ast_expr *> (this->expr->clone ()));
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_node*
+  ast_undef::clone ()
+    { return new ast_undef (); }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_block::~ast_block ()
@@ -56,6 +72,17 @@ namespace arane {
   ast_block::add_stmt (ast_stmt *stmt)
   {
     this->stmts.push_back (stmt);
+  }
+  
+  
+  
+  ast_node*
+  ast_block::clone ()
+  {
+    ast_block *copy = new ast_block ();
+    for (auto stmt : this->stmts)
+      copy->add_stmt (static_cast<ast_stmt *> (stmt->clone ()));
+    return copy;
   }
   
   
@@ -86,11 +113,27 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_ident::clone ()
+  {
+    return new ast_ident (this->name, this->type);
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_integer::ast_integer (long long val)
   {
     this->val = val;
+  }
+  
+  
+  
+  ast_node*
+  ast_integer::clone ()
+  {
+    return new ast_integer (this->val);
   }
   
   
@@ -104,11 +147,27 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_bool::clone ()
+  {
+    return new ast_bool (this->val);
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_string::ast_string (const std::string& str)
     : str (str)
     { }
+  
+  
+  
+  ast_node*
+  ast_string::clone ()
+  {
+    return new ast_string (this->str);
+  }
   
   
   
@@ -123,6 +182,22 @@ namespace arane {
         else
           delete ent.val.expr;
       }
+  }
+  
+  
+  
+  ast_node*
+  ast_interp_string::clone ()
+  {
+    ast_interp_string *copy = new ast_interp_string ();
+    
+    for (auto ent : this->entries)
+      if (ent.type == ISET_PART)
+        copy->add_part (ent.val.str);
+      else
+        copy->add_expr (static_cast<ast_expr *> (ent.val.expr->clone ()));
+    
+    return copy;
   }
   
   
@@ -157,6 +232,17 @@ namespace arane {
     for (ast_expr *elem : this->elems)
       delete elem;
   }
+  
+  
+  
+  ast_node*
+  ast_list::clone ()
+  {
+    auto copy = new ast_list ();
+    for (auto elem : this->elems)
+      copy->add_elem (static_cast<ast_expr *> (elem->clone ()));
+    return copy;
+  }
  
  
     
@@ -164,6 +250,19 @@ namespace arane {
   ast_list::add_elem (ast_expr *expr)
   {
     this->elems.push_back (expr);
+  }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_node*
+  ast_anonym_array::clone ()
+  {
+    auto copy = new ast_anonym_array ();
+    for (auto elem : this->get_elems ())
+      copy->add_elem (static_cast<ast_expr *> (elem->clone ()));
+    return copy;
   }
   
   
@@ -180,6 +279,15 @@ namespace arane {
   {
     delete this->expr;
     delete this->index;
+  }
+  
+  
+  
+  ast_node*
+  ast_subscript::clone ()
+  {
+    return new ast_subscript (static_cast<ast_expr *> (this->expr->clone ()),
+      static_cast<ast_expr *> (this->index->clone ()));
   }
   
   
@@ -201,6 +309,15 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_binop::clone ()
+  {
+    return new ast_binop (static_cast<ast_expr *> (this->lhs->clone ()),
+      static_cast<ast_expr *> (this->rhs->clone ()), this->type);
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_sub_call::ast_sub_call (const std::string& name, ast_list *params)
@@ -212,6 +329,15 @@ namespace arane {
   ast_sub_call::~ast_sub_call ()
   {
     delete this->params;
+  }
+  
+  
+  
+  ast_node*
+  ast_sub_call::clone ()
+  {
+    return new ast_sub_call (this->name,
+      static_cast<ast_list *> (this->params->clone ()));
   }
   
   
@@ -231,6 +357,15 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_named_unop::clone ()
+  {
+    return new ast_named_unop (this->type,
+      static_cast<ast_expr *> (this->param->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_sub::ast_sub (const std::string& name)
@@ -245,6 +380,21 @@ namespace arane {
     for (ast_sub_param& param : this->params)
       delete param.expr;
     delete this->body;
+  }
+  
+  
+  
+  ast_node*
+  ast_sub::clone ()
+  {
+    ast_sub *copy = new ast_sub (this->name);
+    copy->set_return_type (this->ret_type);
+    copy->set_body (static_cast<ast_block *> (this->body->clone ()));
+    
+    for (auto p : this->params)
+      copy->add_param (static_cast<ast_expr *> (p.expr->clone ()));
+    
+    return copy;
   }
   
   
@@ -286,6 +436,15 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_return::clone ()
+  {
+    return new ast_return (static_cast<ast_expr *> (this->expr->clone ()),
+      this->implicit);
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_if::ast_if (ast_expr *cond, ast_block *body)
@@ -306,6 +465,25 @@ namespace arane {
         delete part.cond;
         delete part.body;
       }
+  }
+  
+  
+  
+  ast_node*
+  ast_if::clone ()
+  {
+    auto copy = new ast_if (
+      static_cast<ast_expr *> (this->main_part.cond->clone ()),
+      static_cast<ast_block *> (this->main_part.body->clone ()));
+    
+    if (this->else_part)
+      copy->add_else (static_cast<ast_block *> (this->else_part->clone ()));
+    
+    for (auto p : this->elsifs)
+      copy->add_elsif (static_cast<ast_expr *> (p.cond->clone ()),
+        static_cast<ast_block *> (p.body->clone ()));
+    
+    return copy;
   }
   
   
@@ -338,6 +516,14 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_deref::clone ()
+  {
+    return new ast_deref (static_cast<ast_expr *> (this->expr->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_ref::ast_ref (ast_expr *expr)
@@ -348,6 +534,14 @@ namespace arane {
   ast_ref::~ast_ref ()
   {
     delete this->expr;
+  }
+  
+  
+  
+  ast_node*
+  ast_ref::clone ()
+  {
+    return new ast_ref (static_cast<ast_expr *> (this->expr->clone ()));
   }
   
   
@@ -364,6 +558,15 @@ namespace arane {
   {
     delete this->cond;
     delete this->body;
+  }
+  
+  
+  
+  ast_node*
+  ast_while::clone ()
+  {
+    return new ast_while (static_cast<ast_expr *> (this->cond->clone ()),
+      static_cast<ast_block *> (this->body->clone ()));
   }
   
   
@@ -386,6 +589,16 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_for::clone ()
+  {
+    return new ast_for (static_cast<ast_expr *> (this->arg->clone ()),
+      static_cast<ast_ident *> (this->var->clone ()),
+      static_cast<ast_block *> (this->body->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_range::ast_range (ast_expr *lhs, bool lhs_exc, ast_expr *rhs, bool rhs_exc)
@@ -400,6 +613,16 @@ namespace arane {
   {
     delete this->lhs;
     delete this->rhs;
+  }
+  
+  
+  
+  ast_node*
+  ast_range::clone ()
+  {
+    return new ast_range (static_cast<ast_expr *> (this->lhs->clone ()),
+      this->lhs_exc, static_cast<ast_expr *> (this->rhs->clone ()),
+      this->rhs_exc);
   }
   
   
@@ -424,6 +647,17 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_loop::clone ()
+  {
+    return new ast_loop (static_cast<ast_block *> (this->body->clone ()),
+      static_cast<ast_expr *> (this->init->clone ()),
+      static_cast<ast_expr *> (this->cond->clone ()),
+      static_cast<ast_expr *> (this->step->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_package::ast_package (const std::string& name, ast_block *body)
@@ -439,6 +673,15 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_package::clone ()
+  {
+    return new ast_package (this->name,
+      static_cast<ast_block *> (this->body->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_module::ast_module (const std::string& name, ast_block *body)
@@ -447,11 +690,28 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_module::clone ()
+  {
+    return new ast_module (this->get_name (),
+      static_cast<ast_block *> (this->get_body ()->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_use::ast_use (const std::string& what)
     : what (what)
     { }
+  
+  
+  
+  ast_node*
+  ast_use::clone ()
+  {
+    return new ast_use (this->what);
+  }
   
   
   
@@ -473,6 +733,16 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_conditional::clone ()
+  {
+    return new ast_conditional (static_cast<ast_expr *> (this->test->clone ()),
+      static_cast<ast_expr *> (this->conseq->clone ()),
+      static_cast<ast_expr *> (this->alt->clone ()));
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_of_type::ast_of_type (ast_expr *expr, const type_info& ti)
@@ -484,6 +754,15 @@ namespace arane {
   ast_of_type::~ast_of_type ()
   {
     delete this->expr;
+  }
+  
+  
+  
+  ast_node*
+  ast_of_type::clone ()
+  {
+    return new ast_of_type (static_cast<ast_expr *> (this->expr->clone ()),
+      this->ti);
   }
   
   
@@ -512,12 +791,30 @@ namespace arane {
   
   
   
+  ast_node*
+  ast_prefix::clone ()
+  {
+    return new ast_prefix (static_cast<ast_expr *> (this->get_expr ()->clone ()),
+      this->op);
+  }
+  
+  
+  
 //------------------------------------------------------------------------------
   
   ast_postfix::ast_postfix (ast_expr *expr, ast_postfix_type op)
     : ast_unop (expr)
   {
     this->op = op;
+  }
+  
+  
+  
+  ast_node*
+  ast_postfix::clone ()
+  {
+    return new ast_postfix (static_cast<ast_expr *> (this->get_expr ()->clone ()),
+      this->op);
   }
 }
 
