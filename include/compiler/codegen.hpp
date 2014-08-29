@@ -188,7 +188,7 @@ namespace arane {
     void emit_alloc_array (unsigned int len);
     void emit_array_set ();
     void emit_array_get ();
-    void emit_box_array (unsigned char count);
+    void emit_arrayify (unsigned short count);
     void emit_flatten ();
     
     void emit_to_str ();
@@ -209,6 +209,7 @@ namespace arane {
     void emit_arg_load (unsigned char index);
     void emit_arg_store (unsigned char index);
     void emit_arg_load_ref (unsigned char index);
+    void emit_make_arg_array (unsigned short count);
     
     void emit_to_compatible (const type_info& ti);
     

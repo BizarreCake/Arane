@@ -19,6 +19,7 @@
 #include "compiler/signatures.hpp"
 #include "common/types.hpp"
 #include "parser/ast_store.hpp"
+#include "compiler/asttools.hpp"
 #include <memory>
 
 #include <iostream> // DEBUG
@@ -126,6 +127,7 @@ namespace arane {
       }
     
     inf->ret_ti = ast->get_return_type ();
+    inf->uses_def_arr = ast::count_ident_uses (ast, AST_IDENT_ARRAY, "_");
     
     this->sub_map[inf->name] = this->subs.size ();
     this->subs.push_back (inf.release ());

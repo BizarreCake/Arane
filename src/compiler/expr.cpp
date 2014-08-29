@@ -72,10 +72,35 @@ namespace arane {
         if (var)
           {
             // subroutine parameter
-            this->cgen->emit_arg_load (var->index);
+            
+            // get subroutine
+            ast_sub *sub = nullptr; {
+              frame *f = &frm;
+              while (f->get_type () != FT_SUBROUTINE)
+                f = f->get_parent ();
+              sub = f->sub;
+            }
+            
+            std::string full_name = this->top_package ().get_path ();
+            if (!full_name.empty ())
+              full_name.append ("::");
+            full_name.append (sub->get_name ());
+            
+            auto sig = this->sigs.find_sub (full_name);
+            this->cgen->emit_arg_load (var->index + sig->uses_def_arr);
           }
         else
           {
+            // special variables
+            if (name == "_")
+              {
+                if (ast->get_ident_type () == AST_IDENT_ARRAY)
+                  {
+                    this->cgen->emit_arg_load (0);
+                    return;
+                  }
+              }
+            
             // global variable
             this->cgen->emit_load_global (this->insert_string (name));
           }
@@ -140,7 +165,7 @@ namespace arane {
     
     for (unsigned int i = 0; i < elems.size (); ++i)
       this->compile_expr (elems[i]);
-    this->cgen->emit_box_array (elems.size ());
+    this->cgen->emit_arrayify (elems.size ());
   }
   
   
@@ -150,15 +175,9 @@ namespace arane {
   {
     auto& elems = ast->get_elems ();
     
-    this->cgen->emit_alloc_array (elems.size ());
     for (unsigned int i = 0; i < elems.size (); ++i)
-      {
-        this->cgen->emit_dup ();
-        this->cgen->emit_push_int (i);
-        this->compile_expr (elems[i]);
-        this->cgen->emit_array_set ();
-      }
-    
+      this->compile_expr (elems[i]);
+    this->cgen->emit_arrayify (elems.size ());
     this->cgen->emit_box ();
   }
   

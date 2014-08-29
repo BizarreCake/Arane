@@ -113,7 +113,6 @@ namespace arane {
         }
         break;
       
-      case AST_PROGRAM:
       case AST_BLOCK:
         {
           // new namespace
@@ -483,11 +482,11 @@ namespace arane {
           }
         
         auto& params = ast->get_params ()->get_elems ();
-        if (params.size () != sig->params.size ())
+        if (params.size () < sig->params.size ())
           {
             std::stringstream ss;
-            ss << "subroutine `" << sig->name << "' expects " << sig->params.size ()
-              << " parameter(s), " << params.size () << " given.";
+            ss << "subroutine `" << sig->name << "' expects at least " << sig->params.size ()
+              << " required parameter(s), " << params.size () << " given.";
             this->errs.error (ES_COMPILER, ss.str (), ast->get_line (),
               ast->get_column ());
             return;
@@ -499,37 +498,45 @@ namespace arane {
             auto param = params[i];
             this->compile_expr (param);
             
-            // if the type is not known beforehand, defer the checking
-            // to runtime.
-            auto& ti = sig->params[i].ti;
-            if (!ti.is_none ())
+            // perform type checking if needed
+            if (i < (int)sig->params.size ())
               {
-                auto dt = this->deduce_type (param);
-                if (dt.is_none ())  // deduction failed
+                // if the type is not known beforehand, defer the checking
+                // to runtime.
+                auto& ti = sig->params[i].ti;
+                if (!ti.is_none ())
                   {
-                    // cast to compatible type, or die.
-                    this->cgen->emit_to_compatible (ti);
-                  }
-                else
-                  {
-                    // check for incompatible types
-                    auto tc = dt.check_compatibility (ti);
-                    if (tc == TC_INCOMPATIBLE)
+                    auto dt = this->deduce_type (param);
+                    if (dt.is_none ())  // deduction failed
                       {
-                        this->errs.error (ES_COMPILER,
-                          "attempting to pass a parameter of an incompatible"
-                          " type `" + dt.str () + "' where `" + ti.str () + "'"
-                          " is expected", param->get_line (), param->get_column ());
-                        return;
-                      }
-                    else if (tc == TC_CASTABLE)
-                      {
-                        // an cast is still needed
+                        // cast to compatible type, or die.
                         this->cgen->emit_to_compatible (ti);
+                      }
+                    else
+                      {
+                        // check for incompatible types
+                        auto tc = dt.check_compatibility (ti);
+                        if (tc == TC_INCOMPATIBLE)
+                          {
+                            this->errs.error (ES_COMPILER,
+                              "attempting to pass a parameter of an incompatible"
+                              " type `" + dt.str () + "' where `" + ti.str () + "'"
+                              " is expected", param->get_line (), param->get_column ());
+                            return;
+                          }
+                        else if (tc == TC_CASTABLE)
+                          {
+                            // an cast is still needed
+                            this->cgen->emit_to_compatible (ti);
+                          }
                       }
                   }
               }
           }
+        
+        // if @_ is used in the subroutine, create it
+        if (sig->uses_def_arr)
+          this->cgen->emit_make_arg_array (params.size ());
         
         // call instruction
         if (pack)
@@ -537,7 +544,7 @@ namespace arane {
             subroutine_info& sub = this->global_package ().get_sub (name);
             
             int call_lbl = this->cgen->create_and_mark_label ();
-            this->cgen->emit_call (sub.lbl, params.size ());
+            this->cgen->emit_call (sub.lbl, params.size () + sig->uses_def_arr);
             
             this->sub_uses.push_back ({
               .name = name,
@@ -555,7 +562,7 @@ namespace arane {
               auto& buf = cgen->get_buffer ();
               buf.put_byte (0x71);
               buf.put_int (0);
-              buf.put_byte (params.size ());
+              buf.put_byte (params.size () + sig->uses_def_arr);
             }
             
             this->sub_uses.push_back ({

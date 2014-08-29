@@ -32,7 +32,7 @@
 
 namespace arane {
   
-#define STACK_SIZE        8192
+#define STACK_SIZE        4096
   
   virtual_machine::virtual_machine ()
     : out (&std::cout), in (&std::cin), gc (*this)
@@ -488,66 +488,29 @@ namespace arane {
             }
             break;
           
-          // box_array
-          // NOTE: Any array parameters will have their elements inserted into
-          //       the resulting array (flattening it out).
+          // arrayify - creates and array from the top-most elements in the stack.
           case 0x33:
             {
-              unsigned char count = *ptr++;
-              if (count == 1)
-                {
-                  if (stack[sp - 1].type == PERL_REF &&
-                      stack[sp - 1].val.ref &&
-                      stack[sp - 1].val.ref->type == PERL_ARRAY)
-                    {
-                      // don't do anything
-                      break;
-                    }
-                }
+              unsigned short count = *((unsigned short *)ptr);
+              ptr += 2;
               
-              unsigned int tcount = 0;
-              for (unsigned int i = 0; i < count; ++i)
-                {
-                  auto& val = stack[sp - i - 1];
-                  if (val.type == PERL_REF && val.val.ref && val.val.ref->type == PERL_ARRAY)
-                    {
-                      // flatten out
-                      tcount += val.val.ref->val.arr.len;
-                    }
-                  else
-                    ++ tcount;
-                }
-              
-              unsigned int cap = tcount ? tcount : 1;
-              
+              unsigned int cap = count ? count : 1;
               p_value *data = this->gc.alloc (true);
               data->type = PERL_ARRAY;
-              data->val.arr.len = tcount;
-              data->val.arr.cap = cap;
-              data->val.arr.data = new p_value [cap];
-              unsigned int n = 0;
+              auto& arr = data->val.arr;
+              arr.cap = cap;
+              arr.len = count;
+              arr.data = new p_value[cap];
               for (unsigned int i = 0; i < count; ++i)
                 {
-                  auto& val = stack[sp - (count - i)];
-                  if (val.type == PERL_REF && val.val.ref && val.val.ref->type == PERL_ARRAY)
-                    {
-                      // flatten out
-                      auto& arr = *val.val.ref;
-                      unsigned int arr_len = arr.val.arr.len;
-                      for (unsigned int j = 0; j < arr_len; ++j)
-                        data->val.arr.data[n++] = arr.val.arr.data[j];
-                    }
-                  else
-                    data->val.arr.data[n++] = val;
+                  arr.data[i] = stack[sp - (count - i)];
                 }
               
               sp -= count;
-              
-              p_value& val = stack[sp++];
-              val.type = PERL_REF;
-              val.val.ref = data;
+              stack[sp].type = PERL_REF;
+              stack[sp].val.ref = data;
+              ++ sp;
               p_value_unprotect (data);
-              this->gc.notify_increase (cap * sizeof (p_value));
             }
             break;
           
@@ -798,6 +761,33 @@ namespace arane {
             stack[sp].val.ref->is_gc = false;
             ++ sp;
             break;
+         
+         // make_arg_array - creates an array from the top-most elements in the
+         //                  stack without consuming them (elements are read in
+         //                  reverse order).
+         case 0x78:
+          {
+            unsigned short count = *((unsigned short *)ptr);
+            ptr += 2;
+            
+            unsigned int cap = count ? count : 1;
+            p_value *data = this->gc.alloc (true);
+            data->type = PERL_ARRAY;
+            auto& arr = data->val.arr;
+            arr.cap = cap;
+            arr.len = count;
+            arr.data = new p_value[cap];
+            for (unsigned int i = 0; i < count; ++i)
+              {
+                arr.data[i] = stack[sp - i - 1];
+              }
+            
+            stack[sp].type = PERL_REF;
+            stack[sp].val.ref = data;
+            ++ sp;
+            p_value_unprotect (data);
+          }
+          break;
                     
 //------------------------------------------------------------------------------
           

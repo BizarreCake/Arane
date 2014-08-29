@@ -217,7 +217,6 @@ namespace arane {
     
     // list length
     this->cgen->emit_dup ();
-    this->cgen->emit_box_array (1);
     this->cgen->emit_call_builtin ("elems", 1);
     
     // test

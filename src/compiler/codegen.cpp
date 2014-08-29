@@ -520,10 +520,10 @@ namespace arane {
   }
   
   void
-  code_generator::emit_box_array (unsigned char count)
+  code_generator::emit_arrayify (unsigned short count)
   {
     this->buf.put_byte (0x33);
-    this->buf.put_byte (count); 
+    this->buf.put_short (count);
   }
   
   void
@@ -710,6 +710,13 @@ namespace arane {
   {
     this->buf.put_byte (0x75);
     this->buf.put_byte (index);
+  }
+  
+  void
+  code_generator::emit_make_arg_array (unsigned short count)
+  {
+    this->buf.put_byte (0x78);
+    this->buf.put_short (count);
   }
   
   

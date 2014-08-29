@@ -43,6 +43,7 @@ namespace arane {
       std::string name;
       std::vector<subroutine_param> params;
       type_info ret_ti;
+      bool uses_def_arr;  // if @_ is used
     };
   }
   
