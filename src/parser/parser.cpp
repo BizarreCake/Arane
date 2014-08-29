@@ -582,15 +582,30 @@ namespace arane {
             ast_expr *atom = _parse_atom (ps);
             if (atom)
               {
-                if ((atom->get_type () == AST_IDENT) || (atom->get_type () == AST_OF_TYPE))
-                  sub->add_param (atom);
-                else
+                if (!((atom->get_type () == AST_IDENT) || (atom->get_type () == AST_OF_TYPE)))
                   {
                     ps.errs.error (ES_PARSER, "expected an identifier or a type "
                       "name followed by an identifier in subroutine's parameter "
                       "list", tok.ln, tok.col);
                     return nullptr;
                   }
+                
+                // parameter traits
+                while ((tok = toks.peek_next ()).typ == TOK_IS)
+                  {
+                    toks.next ();
+                    tok = toks.next ();
+                    if (tok.typ != TOK_IDENT_NONE)
+                      {
+                        ps.errs.error (ES_PARSER, "expected trait name after 'is'",
+                          tok.ln, tok.col);
+                        return nullptr;
+                      }
+                    
+                    atom->add_trait (tok.val.str);
+                  }
+                
+                sub->add_param (atom);
               }
             
             tok = toks.peek_next ();
@@ -605,6 +620,23 @@ namespace arane {
                 return nullptr;
               }
           }
+      }
+    
+    /* 
+     * Traits:
+     */
+    while ((tok = toks.peek_next ()).typ == TOK_IS)
+      {
+        toks.next ();
+        tok = toks.next ();
+        if (tok.typ != TOK_IDENT_NONE)
+          {
+            ps.errs.error (ES_PARSER, "expected trait name after 'is'",
+              tok.ln, tok.col);
+            return nullptr;
+          }
+        
+        sub->add_trait (tok.val.str);
       }
     
     /* 

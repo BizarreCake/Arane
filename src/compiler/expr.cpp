@@ -73,20 +73,7 @@ namespace arane {
           {
             // subroutine parameter
             
-            // get subroutine
-            ast_sub *sub = nullptr; {
-              frame *f = &frm;
-              while (f->get_type () != FT_SUBROUTINE)
-                f = f->get_parent ();
-              sub = f->sub;
-            }
-            
-            std::string full_name = this->top_package ().get_path ();
-            if (!full_name.empty ())
-              full_name.append ("::");
-            full_name.append (sub->get_name ());
-            
-            auto sig = this->sigs.find_sub (full_name);
+            auto sig = this->get_curr_sub_sig ();
             this->cgen->emit_arg_load (var->index + sig->uses_def_arr);
           }
         else

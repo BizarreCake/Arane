@@ -224,6 +224,14 @@ namespace arane {
             ++ sp;
             break;
           
+          // copy - performs a shallow copy of the top-most item on the stack.
+          case 0x0B:
+            CHECK_STACK_SPACE(1)
+            stack[sp] = p_value_copy (stack[sp - 1], *this);
+            ++ sp;
+            _unprotect_external (stack[sp - 1]);
+            break;
+          
 //------------------------------------------------------------------------------
           
           

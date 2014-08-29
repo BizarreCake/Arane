@@ -36,6 +36,8 @@ namespace arane {
     {
       std::string name;
       type_info ti;
+      
+      bool is_rw, is_copy;
     };
     
     struct subroutine_info

@@ -306,6 +306,12 @@ namespace arane {
     void compile_sub_last (ast_sub_call *ast);
     void compile_sub_next (ast_sub_call *ast);
     void compile_sub_checkpoint (ast_sub_call *ast);
+    
+  private:
+    /* 
+     * Returns the signature of the current subroutine.
+     */
+    sigs::subroutine_info* get_curr_sub_sig ();
   };
 }
 

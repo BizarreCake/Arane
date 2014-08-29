@@ -300,6 +300,12 @@ namespace arane {
     this->buf.put_byte (0x0A);
   }
   
+  void
+  code_generator::emit_copy ()
+  {
+    this->buf.put_byte (0x0B);
+  }
+  
   
   
   void

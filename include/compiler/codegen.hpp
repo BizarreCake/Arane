@@ -163,6 +163,7 @@ namespace arane {
     void emit_store_global (unsigned int pos);
     void emit_push_true ();
     void emit_push_false ();
+    void emit_copy ();
     
     void emit_add ();
     void emit_sub ();

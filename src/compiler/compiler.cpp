@@ -389,5 +389,31 @@ namespace arane {
     
     return this->mod;
   }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  /* 
+   * Returns the signature of the current subroutine.
+   */
+  sigs::subroutine_info*
+  compiler::get_curr_sub_sig ()
+  {
+    // get subroutine
+    ast_sub *sub = nullptr; {
+      frame *f = &this->top_frame ();
+      while (f->get_type () != FT_SUBROUTINE)
+        f = f->get_parent ();
+      sub = f->sub;
+    }
+    
+    std::string full_name = this->top_package ().get_path ();
+    if (!full_name.empty ())
+      full_name.append ("::");
+    full_name.append (sub->get_name ());
+    
+    return this->sigs.find_sub (full_name);
+  }
 }
 

@@ -193,18 +193,79 @@ namespace arane {
   
   
   /* 
-   * Performs a deep copy.
+   * Performs a shallow copy.
    */
-  void
-  p_value_copy (p_value& dest, p_value& src)
+  p_value
+  p_value_copy (p_value& src, virtual_machine& vm)
   {
     switch (src.type)
       {
-      default:
-        dest = src;
+      case PERL_REF:
+        switch (src.val.ref->type)
+          {
+          case PERL_DSTR:
+            {
+              auto& src_str = src.val.ref->val.str;
+              
+              p_value *data = vm.get_gc ().alloc (true);
+              data->type = PERL_DSTR;
+              auto& str = data->val.str;
+              str.cap = src_str.cap;
+              str.len = src_str.len;
+              str.data = new char [str.cap];
+              std::strcpy (str.data, src_str.data);
+              
+              p_value ret;
+              ret.type = PERL_REF;
+              ret.val.ref = data;
+              return ret;
+            }
+          
+          case PERL_ARRAY:
+            {
+              auto& src_arr = src.val.ref->val.arr;
+              
+              p_value *data = vm.get_gc ().alloc (true);
+              data->type = PERL_ARRAY;
+              auto& arr = data->val.arr;
+              arr.cap = src_arr.cap;
+              arr.len = src_arr.len;
+              arr.data = new p_value [arr.cap];
+              for (unsigned int i = 0; i < arr.len; ++i)
+                arr.data[i] = src_arr.data[i];
+              
+              p_value ret;
+              ret.type = PERL_REF;
+              ret.val.ref = data;
+              return ret;
+            }
+            break;
+          
+          case PERL_BIGINT:
+            {
+              p_value *data = vm.get_gc ().alloc (true);
+              data->type = PERL_BIGINT;
+              data->val.bint = new big_int (*src.val.ref->val.bint);
+              
+              p_value ret;
+              ret.type = PERL_REF;
+              ret.val.ref = data;
+              return ret;
+            }
+            break;
+          
+          default:
+            return src;
+          }
         break;
+      
+      default:
+        return src;
       }
   }
+  
+  
+  
   
   static const char*
   _type_to_str (p_value_type type)

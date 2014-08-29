@@ -33,7 +33,7 @@ namespace arane {
      */
     int fold (ast_node *ast, int val,
       const std::function<int (ast_node *, int)>& func,
-      const std::function<bool (ast_node *)>& ignore);
+      const std::function<bool (ast_node *)>& ignore, bool ignore_first = false);
     
     /* 
      * Counts the number AST nodes that match the specified predicate.
@@ -46,6 +46,13 @@ namespace arane {
      */
     int count_ident_uses (ast_node *ast, ast_ident_type type,
       const std::string& name);
+    
+    
+    /* 
+     * Counts the number of local variables that must allocated in the
+     * specified block.
+     */
+    int count_locals_needed (ast_block *ast);
   }
 }
 

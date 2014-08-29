@@ -99,9 +99,9 @@ namespace arane {
   void p_value_unprotect (p_value *val);
   
   /* 
-   * Performs a deep copy.
+   * Performs a shallow copy.
    */
-  void p_value_copy (p_value& dest, p_value& src);
+  p_value p_value_copy (p_value& src, virtual_machine& vm);
 
   /* 
    * Returns a textual representation of the specified value.

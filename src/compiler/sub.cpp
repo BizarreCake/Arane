@@ -20,6 +20,7 @@
 #include "compiler/codegen.hpp"
 #include "compiler/frame.hpp"
 #include "common/utils.hpp"
+#include "compiler/asttools.hpp"
 #include <unordered_set>
 #include <unordered_map>
 #include <sstream>
@@ -28,199 +29,6 @@
 
 
 namespace arane {
-  
-  static bool
-  _is_declerative_unop (ast_named_unop *unop)
-  {
-    switch (unop->get_op ())
-      {
-      case AST_UNOP_MY:
-        return true;
-      
-      default:
-        return false;
-      }
-  }
-  
-  
-  // forward dec:
-  static unsigned int _count_locals_needed_imp (ast_node *ast,
-    std::unordered_set<std::string>& vars);
-  
-  static unsigned
-  _count_locals_needed_for_named_unop (ast_named_unop *unop, ast_expr *param,
-    std::unordered_set<std::string>& vars)
-  {
-    unsigned int count = 0;
-    if (param->get_type () == AST_LIST)
-      {
-        ast_list *lst = static_cast<ast_list *> (param);
-        for (ast_expr *elem : lst->get_elems ())
-          {
-            if (elem->get_type () == AST_IDENT)
-              {
-                if (_is_declerative_unop (unop))
-                  {
-                    ast_ident *ident = static_cast<ast_ident *> (elem);
-                    if (vars.find (ident->get_name ()) == vars.end ())
-                      {
-                        vars.insert (ident->get_name ());
-                        ++ count;
-                      }
-                  }
-              }
-            else
-              count += _count_locals_needed_imp (elem, vars);
-            
-            // TODO: handle lists in lists?
-          }
-      }
-    else if (param->get_type () == AST_IDENT)
-      {
-        if (_is_declerative_unop (unop))
-          {
-            ast_ident *ident = static_cast<ast_ident *> (param);
-            if (vars.find (ident->get_name ()) == vars.end ())
-              {
-                vars.insert (ident->get_name ());
-                ++ count;
-              }
-          }
-      }
-    else if (param->get_type () == AST_OF_TYPE)
-      {
-        count += _count_locals_needed_for_named_unop (unop,
-          (static_cast<ast_of_type *> (param))->get_expr (), vars);
-      }
-    else
-      count += _count_locals_needed_imp (param, vars);
-    
-    return count; 
-  }
-  
-  unsigned int
-  _count_locals_needed_imp (ast_node *ast, std::unordered_set<std::string>& vars)
-  {
-    unsigned int count = 0;
-    
-    switch (ast->get_type ())
-      {
-      case AST_NAMED_UNARY:
-        {
-          ast_named_unop *unop = static_cast<ast_named_unop *> (ast);
-          count += _count_locals_needed_for_named_unop (unop,
-            unop->get_param (), vars);
-        }
-        break;
-      
-      case AST_BLOCK:
-        {
-          // new namespace
-          std::unordered_set<std::string> nvars;
-          
-          ast_block *blk = static_cast<ast_block *> (ast);
-          for (ast_stmt *stmt : blk->get_stmts ())
-            count += _count_locals_needed_imp (stmt, nvars);
-        }
-        break;
-      
-      case AST_MODULE:
-        {
-          ast_module *mod = static_cast<ast_module *> (ast);
-          count += _count_locals_needed_imp (mod->get_body (), vars);
-        }
-        break;
-      
-      
-      case AST_EXPR_STMT:
-        count += _count_locals_needed_imp (
-          (static_cast<ast_expr_stmt *> (ast))->get_expr (), vars);
-        break;
-      
-      case AST_BINARY:
-        {
-          ast_binop *bop = static_cast<ast_binop *> (ast);
-          
-          count += _count_locals_needed_imp (bop->get_lhs (), vars);
-          count += _count_locals_needed_imp (bop->get_rhs (), vars);
-        }
-        break;
-      
-      case AST_SUB_CALL:
-        {
-          ast_sub_call *call = static_cast<ast_sub_call *> (ast);
-          if (call->get_params ())
-            count += _count_locals_needed_imp (call->get_params (), vars);
-        }
-        break;
-      
-      case AST_IF:
-        {
-          ast_if *aif = static_cast<ast_if *> (ast);
-          count += _count_locals_needed_imp (aif->get_main_part ().cond, vars);
-          count += _count_locals_needed_imp (aif->get_main_part ().body, vars);
-          if (aif->get_else_part ())
-            count += _count_locals_needed_imp (aif->get_else_part (), vars);
-          
-          auto& elsifs = aif->get_elsif_parts ();
-          for (auto p : elsifs)
-            {
-              count += _count_locals_needed_imp (p.cond, vars);
-              count += _count_locals_needed_imp (p.body, vars);
-            }
-        }
-        break;
-      
-      case AST_WHILE:
-        {
-          ast_while *awhile = static_cast<ast_while *> (ast);
-          count += _count_locals_needed_imp (awhile->get_cond (), vars);
-          count += _count_locals_needed_imp (awhile->get_body (), vars);
-        }
-        break;
-      
-      case AST_FOR:
-        {
-          ast_for *afor = static_cast<ast_for *> (ast);
-          count += _count_locals_needed_imp (afor->get_body (), vars);
-          ++ count; // var
-          ++ count; // anonymous index variable
-          if (afor->get_arg ()->get_type () == AST_RANGE)
-            ++ count; // end variable
-        }
-        break;
-      
-      case AST_LOOP:
-        {
-          ast_loop *loop = static_cast<ast_loop *> (ast);
-          if (loop->get_init ())
-            count += _count_locals_needed_imp (loop->get_init (), vars);
-          if (loop->get_cond ())
-            count += _count_locals_needed_imp (loop->get_cond (), vars);
-          if (loop->get_step ())
-            count += _count_locals_needed_imp (loop->get_step (), vars);
-          count += _count_locals_needed_imp (loop->get_body (), vars);
-        }
-        break;
-      
-      default: ;
-      }
-    
-    return count;
-  }
-  
-  /* 
-   * Counts the number of local variables that should allocated in the
-   * specified block.
-   */
-  static unsigned int
-  _count_locals_needed (ast_block *ast)
-  {
-    std::unordered_set<std::string> vars;
-    return _count_locals_needed_imp (ast, vars);
-  }
-  
-  
   
   void
   compiler::compile_return (ast_return *ast)
@@ -476,8 +284,8 @@ namespace arane {
         auto sig = this->sigs.find_sub (name);
         if (!sig)
           {
-            this->errs.error (ES_COMPILER, "call to subroutine `" + name + "' "
-              "whose signature is not known", ast->get_line (), ast->get_column ());
+            this->errs.error (ES_COMPILER, "call to undeclared subroutine `" + name + "'",
+              ast->get_line (), ast->get_column ());
             return;
           }
         
@@ -498,9 +306,11 @@ namespace arane {
             auto param = params[i];
             this->compile_expr (param);
             
-            // perform type checking if needed
             if (i < (int)sig->params.size ())
               {
+                if (sig->params[i].is_copy)
+                  this->cgen->emit_copy ();
+                
                 // if the type is not known beforehand, defer the checking
                 // to runtime.
                 auto& ti = sig->params[i].ti;
@@ -609,19 +419,13 @@ namespace arane {
           return;
         }
       
-      unsigned int sub_pos = this->cgen->get_buffer ().get_pos ();
       this->cgen->mark_label (sub.lbl);
       sub.marked = true;
-      
-      if (name[0] != '#')
-        {
-          this->mod->export_sub (full_name, sub_pos);
-        }
     }
     
     sub.ret_ti = ast->get_return_type ();
     
-    unsigned int loc_count = _count_locals_needed (body);
+    unsigned int loc_count = ast::count_locals_needed (body);
     this->cgen->emit_push_frame (loc_count);
     
     // set up arguments
@@ -693,6 +497,38 @@ namespace arane {
     
     this->cgen->mark_label (lbl_over);
     this->pop_frame ();
+    
+    // handle traits
+    for (auto& trait : ast->get_traits ())
+      {
+        if (trait == "export")
+          {
+            // must be inside module
+            package *pack = &this->top_package ();
+            if (pack && pack->get_type () != PT_MODULE)
+              pack = pack->get_parent ();
+            if (!pack || pack->get_type () != PT_MODULE)
+              {
+                this->errs.error (ES_COMPILER,
+                  "trait `export' can only be used inside a module",
+                  ast->get_line (), ast->get_column ());
+                return;
+              }
+            
+            if (name[0] != '#')
+              {
+                // TODO: use label instead of raw position!!!
+                unsigned int sub_pos = this->cgen->get_label_pos (sub.lbl);
+                this->mod->export_sub (full_name, sub_pos);
+              }
+          }
+        else
+          {
+            this->errs.error (ES_COMPILER, "use of unknown trait `" + trait + "'",
+              ast->get_line (), ast->get_column ());
+            return;
+          }
+      }
   }
 }
 

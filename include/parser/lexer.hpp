@@ -138,6 +138,7 @@ namespace arane {
     TOK_MODULE,
     TOK_PACKAGE,
     TOK_USE,
+    TOK_IS,
   };
   
   struct token

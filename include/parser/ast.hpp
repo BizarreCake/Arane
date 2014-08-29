@@ -71,6 +71,9 @@ namespace arane {
     // where this tree appears in the code.
     int ln, col;
     
+  protected:
+    std::vector<std::string> traits;
+    
   public:
     inline int get_line () const { return this->ln; }
     inline int get_column () const { return this->col; }
@@ -81,6 +84,13 @@ namespace arane {
   public:
     ast_node ();
     virtual ~ast_node () { }
+    
+  public:
+    inline std::vector<std::string>& get_traits () { return this->traits; }
+    
+    void
+    add_trait (const std::string& str)
+      { this->traits.push_back (str); }
     
   public:
     /* 

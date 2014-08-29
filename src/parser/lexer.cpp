@@ -733,6 +733,7 @@ namespace arane {
       { "module", TOK_MODULE },
       { "package", TOK_PACKAGE },
       { "use", TOK_USE },
+      { "is", TOK_IS },
       { "eq", TOK_EQ_S },
       { "of", TOK_OF },
       

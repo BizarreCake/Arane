@@ -114,7 +114,6 @@ namespace arane {
           }
       }
     
-    
     this->compile_expr (rhs);
     
     frame& frm = this->top_frame ();
@@ -129,6 +128,22 @@ namespace arane {
         var = frm.get_arg (lhs->get_name ());
         if (var)
           {
+            // make sure we can assign to this variable
+            auto sig = this->get_curr_sub_sig ();
+            for (auto& p : sig->params)
+              if (p.name == lhs->get_name ())
+                {
+                  if (!p.is_copy && !p.is_rw)
+                    {
+                      this->errs.error (ES_COMPILER,
+                        "cannot assign to readonly parameter `"
+                        + lhs->get_decorated_name () + "' (must use `copy' "
+                        " or `rw' traits)",
+                        lhs->get_line (), lhs->get_column ());
+                      return;
+                    }
+                }
+            
             this->enforce_assignment_type (var->type, rhs);
             this->cgen->emit_dup ();
             this->cgen->emit_arg_store (var->index);

@@ -124,6 +124,20 @@ namespace arane {
           
           default: ;
           }
+        
+        // traits
+        auto& param = inf->params.back ();
+        for (const std::string& trait : expr->get_traits ())
+          {
+            if (trait == "copy")
+              param.is_copy = true;
+            else if (trait == "rw")
+              param.is_rw = true;
+            else
+              {
+                
+              }
+          }
       }
     
     inf->ret_ti = ast->get_return_type ();
