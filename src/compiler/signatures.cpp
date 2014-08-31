@@ -20,6 +20,7 @@
 #include "common/types.hpp"
 #include "parser/ast_store.hpp"
 #include "compiler/asttools.hpp"
+#include "common/utils.hpp"
 #include <memory>
 
 #include <iostream> // DEBUG
@@ -103,10 +104,16 @@ namespace arane {
         switch (expr->get_type ())
           {
           case AST_IDENT:
-            inf->params.push_back ({
-              .name = (static_cast<ast_ident *> (expr))->get_name (),
-              .ti = type_info::none (),
-            });
+            {
+              auto ident = static_cast<ast_ident *> (expr);
+              inf->params.push_back ({
+                .name = ident->get_name (),
+                .ti = utils::get_boxed (type_info::none (), ident->get_ident_type ()),
+              });
+              
+              if (ident->get_ident_type () == AST_IDENT_ARRAY)
+                inf->params.back ().ti.to_array ();
+            }
             break;
           
           case AST_OF_TYPE:
@@ -114,9 +121,10 @@ namespace arane {
               ast_of_type *oft = static_cast<ast_of_type *> (expr);
               if (oft->get_expr ()->get_type () == AST_IDENT)
                 {
+                  auto ident = static_cast<ast_ident *> (oft->get_expr ());
                   inf->params.push_back ({
-                    .name = (static_cast<ast_ident *> (oft->get_expr ()))->get_name (),
-                    .ti = oft->get_typeinfo (),
+                    .name = ident->get_name (),
+                    .ti = utils::get_boxed (oft->get_typeinfo (), ident->get_ident_type ()),
                   });
                 }
             }

@@ -582,8 +582,13 @@ namespace arane {
               stack[sp].val.i64 = bp;
               ++ sp;
               
+              // current microframe
+              stack[sp].type = PERL_INTERNAL;
+              stack[sp].val.i64 = 0;
+              ++ sp;
+              
               // reserve enough space for the local variables
-              bp = sp - 1;
+              bp = sp;
               for (unsigned int i = 0; i < locs; ++i)
                 stack[sp++].type = PERL_UNDEF;
             }
@@ -601,7 +606,7 @@ namespace arane {
               }
               */
               
-              int pbp = stack[bp].val.i64;
+              int pbp = stack[bp - 2].val.i64;
               sp = bp;
               bp = pbp;
             }
@@ -683,6 +688,41 @@ namespace arane {
             }
             break;
           
+          // push_microframe
+          case 0x6A:
+            CHECK_STACK_SPACE(2)
+            // previous microframe
+            stack[sp].type = PERL_INTERNAL;
+            stack[sp].val.i64 = stack[bp - 1].val.i64;
+            ++ sp;
+            
+            // default value ($_)
+            stack[sp].type = PERL_UNDEF;
+            ++ sp;
+            
+            stack[bp - 1].val.i64 = sp - 2;
+            break;
+          
+          // pop_microframe
+          case 0x6B:
+            {
+              int mfrm = stack[bp - 1].val.i64;
+              stack[bp - 1].val.i64 = stack[mfrm].val.i64;
+              sp = mfrm;
+            }
+            break;
+          
+          // load_def - loads $_
+          case 0x6C:
+            CHECK_STACK_SPACE(1)
+            stack[sp++] = stack[stack[bp - 1].val.i64 + 1];
+            break;
+          
+          // store_def
+          case 0x6D:
+            stack[stack[bp - 1].val.i64 + 1] = stack[--sp];
+            break;
+          
 //------------------------------------------------------------------------------
           
           /* 
@@ -737,13 +777,13 @@ namespace arane {
           // return
           case 0x72:
             {
-              ptr = code + stack[bp - 2].val.i64;
+              ptr = code + stack[bp - 4].val.i64;
               
-              unsigned char paramc = stack[bp - 1].val.i64;
+              unsigned char paramc = stack[bp - 3].val.i64;
               
               int ret_index = sp - 1;
-              int pbp = stack[bp].val.i64;
-              sp = bp - 2 - paramc;
+              int pbp = stack[bp - 2].val.i64;
+              sp = bp - 4 - paramc;
               bp = pbp;
               
               stack[sp++] = stack[ret_index];
@@ -753,19 +793,19 @@ namespace arane {
           // arg_load
           case 0x73:
             CHECK_STACK_SPACE(1)
-            stack[sp++] = stack[bp - 3 - *ptr++];
+            stack[sp++] = stack[bp - 5 - *ptr++];
             break;
           
           // arg_store
           case 0x74:
-            stack[bp - 3 - *ptr++] = stack[--sp];
+            stack[bp - 5 - *ptr++] = stack[--sp];
             break;
             
           // arg_load_ref - load reference to an argument
           case 0x75:
             CHECK_STACK_SPACE(1)
             stack[sp].type = PERL_REF;
-            stack[sp].val.ref = &stack[bp - 3 - *ptr++];
+            stack[sp].val.ref = &stack[bp - 5 - *ptr++];
             stack[sp].val.ref->is_gc = false;
             ++ sp;
             break;

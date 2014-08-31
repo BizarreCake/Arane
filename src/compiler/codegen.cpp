@@ -639,6 +639,30 @@ namespace arane {
       }
   }
   
+  void
+  code_generator::emit_push_microframe ()
+  {
+    this->buf.put_byte (0x6A);
+  }
+  
+  void
+  code_generator::emit_pop_microframe ()
+  {
+    this->buf.put_byte (0x6B);
+  }
+  
+  void
+  code_generator::emit_load_def ()
+  {
+    this->buf.put_byte (0x6C);
+  }
+  
+  void
+  code_generator::emit_store_def ()
+  {
+    this->buf.put_byte (0x6D);
+  }
+  
   
   
   void

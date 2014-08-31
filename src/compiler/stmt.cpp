@@ -129,12 +129,16 @@ namespace arane {
     
     this->push_frame (FT_LOOP);
     frame& frm = this->top_frame ();
-    {
-      type_info ti {};
-      ti.push_basic (TYPE_INT_NATIVE);
-      frm.add_local (ast->get_var ()->get_name (), ti);
-    }
-    int loop_var = frm.get_local (ast->get_var ()->get_name ())->index;
+    
+    if (ast->get_var ())
+      {
+        type_info ti {};
+        ti.push_basic (TYPE_INT_NATIVE);
+        frm.add_local (ast->get_var ()->get_name (), ti);
+      }
+    int loop_var = ast->get_var ()
+      ? frm.get_local (ast->get_var ()->get_name ())->index
+      : frm.alloc_local ();
     
     // store range end
     int end_var = frm.alloc_local ();
@@ -157,6 +161,8 @@ namespace arane {
     frm.extra["index_var"] = loop_var;
     frm.extra["on_range"] = 1;
     
+    this->cgen->emit_push_microframe ();
+    
     // test
     this->cgen->mark_label (lbl_loop);
     this->cgen->emit_load (loop_var);
@@ -167,6 +173,8 @@ namespace arane {
       this->cgen->emit_jg (lbl_done);
     
     // body
+    this->cgen->emit_load (loop_var);
+    this->cgen->emit_store_def ();
     this->compile_block (ast->get_body (), false);
     
     // increment index variable
@@ -177,6 +185,7 @@ namespace arane {
     this->cgen->emit_jmp (lbl_loop);
     
     this->cgen->mark_label (lbl_done);
+    this->cgen->emit_pop_microframe ();
     
     this->pop_frame ();
   }
@@ -195,8 +204,13 @@ namespace arane {
     
     this->push_frame (FT_LOOP);
     frame& frm = this->top_frame ();
-    frm.add_local (ast->get_var ()->get_name ());
-    int loop_var = frm.get_local (ast->get_var ()->get_name ())->index;
+    
+    int loop_var = -1;
+    if (ast->get_var ())
+      {
+        frm.add_local (ast->get_var ()->get_name ());
+        loop_var = frm.get_local (ast->get_var ()->get_name ())->index;
+      }
     
     // setup index variable
     int index_var = frm.alloc_local ();
@@ -213,24 +227,32 @@ namespace arane {
     
     
     // list
+    int list_var = frm.alloc_local ();
     this->compile_expr (ast->get_arg ());
+    this->cgen->emit_storeload (list_var);
     
     // list length
-    this->cgen->emit_dup ();
+    int length_var = frm.alloc_local ();
     this->cgen->emit_call_builtin ("elems", 1);
+    this->cgen->emit_store (length_var);
+    
+    this->cgen->emit_push_microframe ();
     
     // test
     this->cgen->mark_label (lbl_loop);
     this->cgen->emit_load (index_var);
-    this->cgen->emit_dupn (1);  // list length
+    this->cgen->emit_load (length_var);
     this->cgen->emit_jge (lbl_done);
     
     // body
-    this->cgen->emit_dupn (1);    // list
+    this->cgen->emit_load (list_var);
     this->cgen->emit_load (index_var);
     this->cgen->emit_array_get ();
-    this->cgen->emit_store (loop_var);
+    if (loop_var != -1)
+      this->cgen->emit_storeload (loop_var);
+    this->cgen->emit_store_def ();
     this->compile_block (ast->get_body (), false);
+
     
     // increment index variable
     this->cgen->emit_load (index_var);
@@ -240,8 +262,7 @@ namespace arane {
     this->cgen->emit_jmp (lbl_loop);
     
     this->cgen->mark_label (lbl_done);
-    this->cgen->emit_pop ();  // list length
-    this->cgen->emit_pop ();  // list
+    this->cgen->emit_pop_microframe ();
     
     this->pop_frame ();
   }

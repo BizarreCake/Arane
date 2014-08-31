@@ -816,5 +816,22 @@ namespace arane {
     return new ast_postfix (static_cast<ast_expr *> (this->get_expr ()->clone ()),
       this->op);
   }
+  
+  
+  
+//------------------------------------------------------------------------------
+  
+  ast_class::ast_class (const std::string& name, ast_block *body)
+    : ast_module (name, body)
+    { }
+  
+  
+  
+  ast_node*
+  ast_class::clone ()
+  {
+    return new ast_class (this->get_name (),
+      static_cast<ast_block *> (this->get_body ()->clone ()));
+  }
 }
 

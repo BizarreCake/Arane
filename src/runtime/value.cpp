@@ -18,11 +18,11 @@
 
 #include "runtime/value.hpp"
 #include "runtime/vm.hpp"
-#include "runtime/bigint.hpp"
 #include <stdexcept>
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <cstdlib>
 
 #include <iostream> // DEBUG
 
@@ -45,7 +45,22 @@ namespace arane {
   }
   
   static std::string
-  _get_type_name_from_value (p_value& val)
+  _get_type_name_from_ptype_arr (p_basic_type *types, int count)
+  {
+    std::string str;
+    for (int i = 0; i < count - 1; ++i)
+      {
+        str.append (_get_type_name_from_ptype (types[i]));
+        str.append (" of ");
+      }
+    str.append (_get_type_name_from_ptype (types[count - 1]));
+    
+    return str;
+  }
+  
+  
+  static std::string
+  _get_type_name_from_value_once (p_value& val)
   {
     switch (val.type)
       {
@@ -73,6 +88,62 @@ namespace arane {
       }
   }
   
+  static std::string
+  _get_type_name_from_value (p_value& val)
+  {
+    /*
+    p_value *v = &val;
+    std::string str = _get_type_name_from_value_once (val);
+    while (v->type == PERL_REF && v->val.ref && v->val.ref->type == PERL_ARRAY)
+      {
+        v = v->val.ref;
+        str.append (" of ");
+        str.append (_get_type_name_from_value_once (*v));
+      }
+    
+    return str;
+    */
+    return _get_type_name_from_value_once (val);
+  }
+  
+  
+  static p_value*
+  _unwrap_value (p_value *val, p_basic_type typ)
+  {
+    switch (typ)
+      {
+      case PTYPE_ARRAY:
+        if (!(val->type == PERL_REF && val->val.ref && val->val.ref->type == PERL_ARRAY))
+          return nullptr;
+        return val->val.ref;
+      
+      default:
+        return nullptr;
+      }
+  }
+  
+  static bool
+  _is_same_type (p_value& val, p_basic_type typ)
+  {
+    switch (typ)
+      {
+      case PTYPE_INT_NATIVE:
+        return val.type == PERL_INT;
+      case PTYPE_INT:
+        return val.type == PERL_REF && val.val.ref && val.val.ref->type == PERL_BIGINT;
+      case PTYPE_BOOL_NATIVE:
+        return val.type == PERL_BOOL;
+      case PTYPE_STR:
+        return val.type == PERL_CSTR ||
+          (val.type == PERL_REF && val.val.ref && val.val.ref->type == PERL_DSTR);
+      case PTYPE_ARRAY:
+        return val.type == PERL_REF && val.val.ref && val.val.ref->type == PERL_ARRAY;
+      
+      default:
+        return false;
+      }
+  }
+  
   /* 
    * Attempts to cast the specified value into a compatible type.
    */
@@ -80,13 +151,22 @@ namespace arane {
   p_value_to_compatible (p_value& a, p_basic_type *types, int count,
     virtual_machine& vm)
   {
-    if (count != 1)
-      throw std::runtime_error ("not implemented");
-    
 #define THROW_TYPE_ERROR \
   throw type_error ( \
     "cannot cast value of type `" + _get_type_name_from_value (a) + \
-    "' to type `" + _get_type_name_from_ptype (etyp) + "'");
+    "' to type `" + _get_type_name_from_ptype_arr (types, count) + "'");
+    
+    if (count > 1)
+      {
+        p_value *v = &a;
+        for (int i = 0; i < count - 1; ++i)
+          {
+            if (!(v = _unwrap_value (v, types[i])))
+              { THROW_TYPE_ERROR }
+          }
+        //if (!_is_same_type (*v, types[count - 1]))
+        //  { THROW_TYPE_ERROR }
+      }
     
     p_basic_type etyp = types[0];
     switch (etyp)
@@ -113,7 +193,7 @@ namespace arane {
             {
               p_value *data = vm.get_gc ().alloc (true);
               data->type = PERL_BIGINT;
-              data->val.bint = new big_int (a.val.i64);
+              mpz_init_set_ui (data->val.bint, a.val.i64);
               
               p_value res;
               res.type = PERL_REF;
@@ -245,7 +325,7 @@ namespace arane {
             {
               p_value *data = vm.get_gc ().alloc (true);
               data->type = PERL_BIGINT;
-              data->val.bint = new big_int (*src.val.ref->val.bint);
+              mpz_init_set (data->val.bint, src.val.ref->val.bint);
               
               p_value ret;
               ret.type = PERL_REF;
@@ -343,8 +423,9 @@ namespace arane {
         
       case PERL_BIGINT:
         {
-          std::string str;
-          val.val.bint->to_str (str);
+          char *s = mpz_get_str (nullptr, 10, val.val.bint);
+          std::string str {s};
+          free (s);
           return str;
         }
         
@@ -411,7 +492,7 @@ namespace arane {
             switch (b.type)
               {
               case PERL_BIGINT:
-                return a.val.bl == !b.val.ref->val.bint->is_zero ();
+                return a.val.bl == (mpz_sgn (b.val.ref->val.bint) != 0);
               
               default:
                 return false;
@@ -436,7 +517,7 @@ namespace arane {
             switch (b.val.ref->type)
               {
               case PERL_BIGINT:
-                return (b.val.ref->val.bint->cmp (a.val.i64) == 0);
+                return (mpz_cmp_d (b.val.ref->val.bint, a.val.i64) == 0);
               
               default:
                 return false;
@@ -472,16 +553,16 @@ namespace arane {
             switch (b.type)
               {
               case PERL_BOOL:
-                return !a.val.ref->val.bint->is_zero () == b.val.bl;
+                return (mpz_sgn (a.val.ref->val.bint) != 0) == b.val.bl;
               
               case PERL_INT:
-                return (a.val.ref->val.bint->cmp (b.val.i64) == 0);
+                return (mpz_cmp_d (a.val.ref->val.bint, b.val.i64) == 0);
               
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
                   case PERL_BIGINT:
-                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) == 0);
+                    return (mpz_cmp (a.val.ref->val.bint, b.val.ref->val.bint) == 0);
                   
                   default:
                     return false;
@@ -518,7 +599,7 @@ namespace arane {
             switch (b.val.ref->type)
               {
               case PERL_BIGINT:
-                return (b.val.ref->val.bint->cmp (a.val.i64) >= 0);
+                return (mpz_cmp_d (b.val.ref->val.bint, a.val.i64) >= 0);
               
               default:
                 return false;
@@ -540,13 +621,13 @@ namespace arane {
             switch (b.type)
               {
               case PERL_INT:
-                return (a.val.ref->val.bint->cmp (b.val.i64) < 0);
+                return (mpz_cmp_d (a.val.ref->val.bint, b.val.i64) < 0);
               
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
                   case PERL_BIGINT:
-                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) < 0);
+                    return (mpz_cmp (a.val.ref->val.bint, b.val.ref->val.bint) < 0);
                   
                   default:
                     return false;
@@ -583,7 +664,7 @@ namespace arane {
             switch (b.val.ref->type)
               {
               case PERL_BIGINT:
-                return (b.val.ref->val.bint->cmp (a.val.i64) > 0);
+                return (mpz_cmp_d (b.val.ref->val.bint, a.val.i64) > 0);
               
               default:
                 return false;
@@ -605,13 +686,13 @@ namespace arane {
             switch (b.type)
               {
               case PERL_INT:
-                return (a.val.ref->val.bint->cmp (b.val.i64) <= 0);
+                return (mpz_cmp_d (a.val.ref->val.bint, b.val.i64) <= 0);
               
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
                   case PERL_BIGINT:
-                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) <= 0);
+                    return (mpz_cmp (a.val.ref->val.bint, b.val.ref->val.bint) <= 0);
                   
                   default:
                     return false;
@@ -648,7 +729,7 @@ namespace arane {
             switch (b.val.ref->type)
               {
               case PERL_BIGINT:
-                return (b.val.ref->val.bint->cmp (a.val.i64) <= 0);
+                return (mpz_cmp_d (b.val.ref->val.bint, a.val.i64) <= 0);
               
               default:
                 return false;
@@ -670,13 +751,13 @@ namespace arane {
             switch (b.type)
               {
               case PERL_INT:
-                return (a.val.ref->val.bint->cmp (b.val.i64) > 0);
+                return (mpz_cmp_d (a.val.ref->val.bint, b.val.i64) > 0);
               
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
                   case PERL_BIGINT:
-                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) > 0);
+                    return (mpz_cmp (a.val.ref->val.bint, b.val.ref->val.bint) > 0);
                   
                   default:
                     return false;
@@ -713,7 +794,7 @@ namespace arane {
             switch (b.val.ref->type)
               {
               case PERL_BIGINT:
-                return (b.val.ref->val.bint->cmp (a.val.i64) < 0);
+                return (mpz_cmp_d (b.val.ref->val.bint, a.val.i64) < 0);
               
               default:
                 return false;
@@ -735,13 +816,13 @@ namespace arane {
             switch (b.type)
               {
               case PERL_INT:
-                return (a.val.ref->val.bint->cmp (b.val.i64) >= 0);
+                return (mpz_cmp_d (a.val.ref->val.bint, b.val.i64) >= 0);
               
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
                   case PERL_BIGINT:
-                    return (a.val.ref->val.bint->cmp (*b.val.ref->val.bint) >= 0);
+                    return (mpz_cmp (a.val.ref->val.bint, b.val.ref->val.bint) >= 0);
                   
                   default:
                     return false;
@@ -810,8 +891,8 @@ namespace arane {
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (a.val.i64);
-                  data->val.bint->add (*b.val.ref->val.bint);
+                  mpz_init_set_ui (data->val.bint, a.val.i64);
+                  mpz_add (data->val.bint, data->val.bint, b.val.ref->val.bint);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -841,8 +922,8 @@ namespace arane {
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (*a.val.ref->val.bint);
-                  data->val.bint->add (b.val.i64);
+                  mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                  mpz_add_ui (data->val.bint, data->val.bint, b.val.i64);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -857,8 +938,8 @@ namespace arane {
                     {
                       p_value *data = vm.get_gc ().alloc (true);
                       data->type = PERL_BIGINT;
-                      data->val.bint = new big_int (*a.val.ref->val.bint);
-                      data->val.bint->add (*b.val.ref->val.bint);
+                      mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                      mpz_add (data->val.bint, data->val.bint, b.val.ref->val.bint);
                       
                       res.type = PERL_REF;
                       res.val.ref = data;
@@ -915,8 +996,8 @@ namespace arane {
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (a.val.i64);
-                  data->val.bint->sub (*b.val.ref->val.bint);
+                  mpz_init_set_ui (data->val.bint, a.val.i64);
+                  mpz_sub (data->val.bint, data->val.bint, b.val.ref->val.bint);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -946,8 +1027,8 @@ namespace arane {
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (*a.val.ref->val.bint);
-                  data->val.bint->sub (b.val.i64);
+                  mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                  mpz_sub_ui (data->val.bint, data->val.bint, b.val.i64);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -962,8 +1043,8 @@ namespace arane {
                     {
                       p_value *data = vm.get_gc ().alloc (true);
                       data->type = PERL_BIGINT;
-                      data->val.bint = new big_int (*a.val.ref->val.bint);
-                      data->val.bint->sub (*b.val.ref->val.bint);
+                      mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                      mpz_sub (data->val.bint, data->val.bint, b.val.ref->val.bint);
                       
                       res.type = PERL_REF;
                       res.val.ref = data;
@@ -1020,8 +1101,8 @@ namespace arane {
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (a.val.i64);
-                  data->val.bint->mul (*b.val.ref->val.bint);
+                  mpz_init_set_ui (data->val.bint, a.val.i64);
+                  mpz_mul (data->val.bint, data->val.bint, b.val.ref->val.bint);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -1046,12 +1127,13 @@ namespace arane {
           case PERL_BIGINT:
             switch (b.type)
               {
+              // Int + int
               case PERL_INT:
                 {
                   p_value *data = vm.get_gc ().alloc (true);
                   data->type = PERL_BIGINT;
-                  data->val.bint = new big_int (*a.val.ref->val.bint);
-                  data->val.bint->mul (b.val.i64);
+                  mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                  mpz_mul_ui (data->val.bint, data->val.bint, b.val.i64);
                   
                   res.type = PERL_REF;
                   res.val.ref = data;
@@ -1061,12 +1143,13 @@ namespace arane {
               case PERL_REF:
                 switch (b.val.ref->type)
                   {
+                  // Int + Int
                   case PERL_BIGINT:
                     {
                       p_value *data = vm.get_gc ().alloc (true);
                       data->type = PERL_BIGINT;
-                      data->val.bint = new big_int (*a.val.ref->val.bint);
-                      data->val.bint->mul (*b.val.ref->val.bint);
+                      mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                      mpz_mul (data->val.bint, data->val.bint, b.val.ref->val.bint);
                       
                       res.type = PERL_REF;
                       res.val.ref = data;
@@ -1109,12 +1192,93 @@ namespace arane {
       case PERL_INT:
         switch (b.type)
           {
-          // Int + Int
+          // int + int
           case PERL_INT:
-            res.type = PERL_INT;
             if (b.val.i64 == 0)
-              throw std::runtime_error ("division by zero");
+              throw vm_error ("division by zero");
+            res.type = PERL_INT;
             res.val.i64 = a.val.i64 / b.val.i64;
+            break;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              // int + Int
+              case PERL_BIGINT:
+                {
+                  if (mpz_sgn (b.val.ref->val.bint) == 0)
+                    throw vm_error ("division by zero");
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  mpz_init_set_ui (data->val.bint, a.val.i64);
+                  mpz_div (data->val.bint, data->val.bint, b.val.ref->val.bint);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
+            break;
+          
+          default:
+            res.type = PERL_UNDEF;
+            break;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              // Int + int
+              case PERL_INT:
+                {
+                  if (b.val.i64 == 0)
+                    throw vm_error ("division by zero");
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                  mpz_div_ui (data->val.bint, data->val.bint, b.val.i64);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  // Int + Int
+                  case PERL_BIGINT:
+                    {
+                      if (mpz_sgn (b.val.ref->val.bint) == 0)
+                        throw vm_error ("division by zero");
+                      p_value *data = vm.get_gc ().alloc (true);
+                      data->type = PERL_BIGINT;
+                      mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                      mpz_div (data->val.bint, data->val.bint, b.val.ref->val.bint);
+                      
+                      res.type = PERL_REF;
+                      res.val.ref = data;
+                    }
+                    break;
+                  
+                  default:
+                    res.type = PERL_UNDEF;
+                    break;
+                  }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:
@@ -1141,12 +1305,93 @@ namespace arane {
       case PERL_INT:
         switch (b.type)
           {
-          // Int + Int
+          // int + int
           case PERL_INT:
-            res.type = PERL_INT;
             if (b.val.i64 == 0)
-              throw std::runtime_error ("division by zero");
+              throw vm_error ("division by zero");
+            res.type = PERL_INT;
             res.val.i64 = a.val.i64 % b.val.i64;
+            break;
+          
+          case PERL_REF:
+            switch (b.val.ref->type)
+              {
+              // int + Int
+              case PERL_BIGINT:
+                {
+                  if (mpz_sgn (b.val.ref->val.bint) == 0)
+                    throw vm_error ("division by zero");
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  mpz_init_set_ui (data->val.bint, a.val.i64);
+                  mpz_mod (data->val.bint, data->val.bint, b.val.ref->val.bint);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
+            break;
+          
+          default:
+            res.type = PERL_UNDEF;
+            break;
+          }
+        break;
+      
+      case PERL_REF:
+        switch (a.val.ref->type)
+          {
+          case PERL_BIGINT:
+            switch (b.type)
+              {
+              // Int + int
+              case PERL_INT:
+                {
+                  if (b.val.i64 == 0)
+                    throw vm_error ("division by zero");
+                  p_value *data = vm.get_gc ().alloc (true);
+                  data->type = PERL_BIGINT;
+                  mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                  mpz_mod_ui (data->val.bint, data->val.bint, b.val.i64);
+                  
+                  res.type = PERL_REF;
+                  res.val.ref = data;
+                }
+                break;
+              
+              case PERL_REF:
+                switch (b.val.ref->type)
+                  {
+                  // Int + Int
+                  case PERL_BIGINT:
+                    {
+                      if (mpz_sgn (b.val.ref->val.bint) == 0)
+                        throw vm_error ("division by zero");
+                      p_value *data = vm.get_gc ().alloc (true);
+                      data->type = PERL_BIGINT;
+                      mpz_init_set (data->val.bint, a.val.ref->val.bint);
+                      mpz_mod (data->val.bint, data->val.bint, b.val.ref->val.bint);
+                      
+                      res.type = PERL_REF;
+                      res.val.ref = data;
+                    }
+                    break;
+                  
+                  default:
+                    res.type = PERL_UNDEF;
+                    break;
+                  }
+                break;
+              
+              default:
+                res.type = PERL_UNDEF;
+                break;
+              }
             break;
           
           default:
@@ -1245,7 +1490,7 @@ namespace arane {
       case PERL_INT:
         data = vm.get_gc ().alloc (true);
         data->type = PERL_BIGINT;
-        data->val.bint = new big_int (val.val.i64);
+        mpz_init_set_ui (data->val.bint, val.val.i64);
         break;
       
       case PERL_REF:
@@ -1257,7 +1502,7 @@ namespace arane {
           default:
             data = vm.get_gc ().alloc (true);
             data->type = PERL_BIGINT;
-            data->val.bint = new big_int ();
+            mpz_init (data->val.bint);
             break;
           }
         break;
@@ -1265,7 +1510,7 @@ namespace arane {
       default:
         data = vm.get_gc ().alloc (true);
         data->type = PERL_BIGINT;
-        data->val.bint = new big_int ();
+        mpz_init (data->val.bint);
         break;
       }
     
@@ -1298,7 +1543,7 @@ namespace arane {
         switch (val.val.ref->type)
           {
           case PERL_BIGINT:
-            res.val.bl = !val.val.ref->val.bint->is_zero ();
+            res.val.bl = (mpz_sgn (val.val.ref->val.bint) != 0);
             break;
           
           case PERL_CSTR:

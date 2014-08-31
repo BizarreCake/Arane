@@ -203,6 +203,10 @@ namespace arane {
     void emit_store (unsigned int index);
     void emit_storeload (unsigned int index);
     void emit_load_ref (unsigned int index);
+    void emit_push_microframe ();
+    void emit_pop_microframe ();
+    void emit_load_def ();
+    void emit_store_def ();
     
     void emit_call_builtin (const std::string& name, unsigned char param_count);
     void emit_call (int lbl, unsigned char param_count);

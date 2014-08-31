@@ -19,6 +19,7 @@
 #include "compiler/compiler.hpp"
 #include "compiler/codegen.hpp"
 #include "compiler/frame.hpp"
+#include "common/utils.hpp"
 #include <stdexcept>
 
 #include <iostream> // DEBUG
@@ -83,7 +84,14 @@ namespace arane {
               {
                 if (ast->get_ident_type () == AST_IDENT_ARRAY)
                   {
+                    // @_
                     this->cgen->emit_arg_load (0);
+                    return;
+                  }
+                else if (ast->get_ident_type () == AST_IDENT_SCALAR)
+                  {
+                    // $_
+                    this->cgen->emit_load_def ();
                     return;
                   }
               }
@@ -200,7 +208,7 @@ namespace arane {
         variable *var = frm.get_local (name);
         if (!var)
           {
-            frm.add_local (name, ti);
+            frm.add_local (name, utils::get_boxed (ti, ident->get_ident_type ()));
             var = frm.get_local (name);
           }
         

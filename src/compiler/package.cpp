@@ -150,10 +150,9 @@ namespace arane {
     
     unsigned int index = this->subs.size ();
     this->subs.push_back ({
+      .name = name,
       .marked = false,
       .lbl = this->comp.cgen->create_label (),
-      .name = name,
-      .params = {},
     });
     
     this->sub_map[name] = index;

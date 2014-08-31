@@ -327,6 +327,8 @@ namespace arane {
                   ++ var_count; // anonymous index variable
                   if (afor->get_arg ()->get_type () == AST_RANGE)
                     ++ var_count; // end variable
+                  else
+                    var_count += 2;
                 }
                 break;
               

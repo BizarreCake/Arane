@@ -19,6 +19,7 @@
 #include "compiler/compiler.hpp"
 #include "compiler/codegen.hpp"
 #include "compiler/frame.hpp"
+#include "common/utils.hpp"
 
 
 namespace arane {
@@ -247,6 +248,44 @@ namespace arane {
   compiler::assign_to_subscript (ast_subscript *lhs, ast_expr *rhs)
   {
     this->compile_expr (rhs);
+    
+    // make sure types match
+    auto ti = this->deduce_type (lhs->get_expr ());
+    if (!ti.is_none ())
+      {
+        if (ti.types[0].type != TYPE_ARRAY)
+          {
+            this->errs.error (ES_COMPILER,
+              "attempting to subscript a non-array type `" + ti.str () + "'",
+              lhs->get_line (), lhs->get_column ());
+            return;
+          }
+        ti.types.erase (ti.types.begin ());
+        
+        auto dt = this->deduce_type (rhs);
+        if (dt.is_none ())
+          {
+            // defer type checking to runtime
+            this->cgen->emit_to_compatible (ti);
+          }
+        else
+          {
+            auto tc = dt.check_compatibility (ti);
+            if (tc == TC_INCOMPATIBLE)
+              {
+                this->errs.error (ES_COMPILER,
+                "attempting to assign a value of an incompatible type `"
+                + dt.str () + "' where `" + ti.str () + "' is expected",
+                rhs->get_line (), rhs->get_column ());
+              return;
+            }
+          else if (tc == TC_CASTABLE)
+            {
+              this->cgen->emit_to_compatible (ti);
+            }
+          }
+      }
+    
     this->compile_expr (lhs->get_expr ());
     this->compile_expr (lhs->get_index ());
     this->cgen->emit_to_int ();
@@ -297,7 +336,7 @@ namespace arane {
               return false;
             }
           
-          frm.add_local (name, ti);
+          frm.add_local (name, utils::get_boxed (ti, ident->get_ident_type ()));
         }
         break;
       
@@ -309,7 +348,8 @@ namespace arane {
               if (elem->get_type () == AST_IDENT)
                 {
                   ast_ident *ident = static_cast<ast_ident *> (elem);
-                  frm.add_local (ident->get_name (), ti);
+                  frm.add_local (ident->get_name (),
+                    utils::get_boxed (ti, ident->get_ident_type ()));
                 }
             }
         }

@@ -21,6 +21,7 @@
 
 #include "runtime/types.hpp"
 #include <string>
+#include <gmp.h>
 
 
 namespace arane {
@@ -61,7 +62,7 @@ namespace arane {
     union
       {
         long long i64;
-        big_int *bint;
+        mpz_t bint;
         bool bl;
         p_basic_type typ;
         struct
@@ -86,7 +87,6 @@ namespace arane {
     
     // fields used by the GC:
     bool is_gc;               // to differentiate from plain references
-    p_value *gc_forward;
     unsigned char gc_state;
     unsigned char gc_protect;
     

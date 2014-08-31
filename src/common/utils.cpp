@@ -64,6 +64,28 @@ namespace arane {
       path.append (".pm");
       return path;
     }
+    
+    
+    
+    /* 
+     * Returns the specified type boxed accordingly (e.g. into an array).
+     */
+    type_info
+    get_boxed (const type_info& ti, ast_ident_type typ)
+    {
+      switch (typ)
+        {
+        case AST_IDENT_ARRAY:
+          {
+            type_info nt = ti;
+            nt.to_array ();
+            return nt;
+          }
+        
+        default:
+          return ti;
+        }
+    }
   }
 }
 

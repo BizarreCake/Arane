@@ -52,6 +52,18 @@ namespace arane {
   }
   
   
+  /* 
+   * Boxes the type into an array.
+   */
+  void
+  type_info::to_array ()
+  {
+    this->types.insert (this->types.begin (), {
+      .type = TYPE_ARRAY,
+    });
+  }
+  
+  
   
   bool
   type_info::is_none () const
@@ -61,24 +73,16 @@ namespace arane {
   
   
   
-  /* 
-   * Returns true if this type can be safely casted (in a meaningful way)
-   * into the specified type.
-   */
-  type_compatibility
-  type_info::check_compatibility (const type_info& other) const
+  static type_compatibility
+  _is_basic_compatible (const basic_type& a, const basic_type& b)
   {
-    if (this->types.size () != 1 ||
-        other.types.size () != 1)
-      throw std::runtime_error ("hierarchical types not supported yet");
-    
-    if (this->types[0] == other.types[0])
+    if (a.type == b.type)
       return TC_COMPATIBLE;
     
-    switch (this->types[0].type)
+    switch (a.type)
       {
       case TYPE_INT_NATIVE:
-        switch (other.types[0].type)
+        switch (b.type)
           {
           case TYPE_INT:
             return TC_CASTABLE;
@@ -91,6 +95,30 @@ namespace arane {
       }
     
     return TC_INCOMPATIBLE;
+  }
+  
+  /* 
+   * Returns true if this type can be safely casted (in a meaningful way)
+   * into the specified type.
+   */
+  type_compatibility
+  type_info::check_compatibility (const type_info& other) const
+  {
+    if (this->types.size () != other.types.size ())
+      return TC_INCOMPATIBLE;
+    
+    bool need_cast = false;
+    for (unsigned int i = 0; i < this->types.size (); ++i)
+      {
+        auto tc = _is_basic_compatible (this->types[i], other.types[i]);
+        if (tc == TC_INCOMPATIBLE)
+          return tc;
+        
+        if (tc == TC_CASTABLE)
+          need_cast = true;
+      }
+    
+    return need_cast ? TC_CASTABLE : TC_COMPATIBLE;
   }
   
   

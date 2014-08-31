@@ -145,6 +145,9 @@ namespace arane {
     TOK_PACKAGE,
     TOK_USE,
     TOK_IS,
+    TOK_CLASS,
+    TOK_HAS,
+    TOK_METHOD,
   };
   
   struct token

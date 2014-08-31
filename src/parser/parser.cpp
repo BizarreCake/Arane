@@ -106,7 +106,7 @@ namespace arane {
   static ast_expr* _parse_atom (parser_state& ps);
   static ast_ident* _parse_ident (parser_state& ps);
   static ast_block* _parse_block (parser_state& ps);
-  static ast_package* _parse_package_or_module (parser_state& ps);
+  static ast_package* _parse_package_type (parser_state& ps);
   
   
   static bool
@@ -1569,17 +1569,16 @@ namespace arane {
     if (!arg.get ())
       return nullptr;
     
-    token tok = toks.next ();
-    if (tok.typ != TOK_LARROW)
+    std::unique_ptr<ast_ident> var;
+    token tok = toks.peek_next ();
+    if (tok.typ == TOK_LARROW)
       {
-        ps.errs.error (ES_PARSER, "expected '->' after for expression argument",
-          tok.ln, tok.col);
-        return nullptr;
+        toks.next ();
+        
+        var.reset (_parse_ident (ps));
+        if (!var.get ())
+          return nullptr;
       }
-    
-    std::unique_ptr<ast_ident> var { _parse_ident (ps) };
-    if (!var.get ())
-      return nullptr;
     
     tok = toks.peek_next ();
     if (tok.typ != TOK_LBRACE)
@@ -1806,8 +1805,9 @@ namespace arane {
           {
           case TOK_MODULE:
           case TOK_PACKAGE:
+          case TOK_CLASS:
             {
-              ast_package *pkg = _parse_package_or_module (ps);
+              ast_package *pkg = _parse_package_type (ps);
               if (pkg)
                 body->add_stmt (pkg);
             }
@@ -1827,18 +1827,18 @@ namespace arane {
   }
   
   ast_package*
-  _parse_package_or_module (parser_state& ps)
+  _parse_package_type (parser_state& ps)
   {
     token_seq& toks = ps.toks;
     
-    token ftok = toks.next (); // skip 'module' or 'package'
+    token ftok = toks.next (); // skip 'module', 'package', or 'class'
     
     // name
     // TODO: handle ::s
     token tok = toks.next ();
     if (tok.typ != TOK_IDENT_NONE)
       {
-        ps.errs.error (ES_PARSER, "expected module name after `module'",
+        ps.errs.error (ES_PARSER, "expected package name",
           tok.ln, tok.col);
         return nullptr;
       }
@@ -1859,7 +1859,9 @@ namespace arane {
       return new ast_package (name, body);
     else if (ftok.typ == TOK_MODULE)
       return new ast_module (name, body);
-    throw std::runtime_error ("expected module or package");
+    else if (ftok.typ == TOK_CLASS)
+      return new ast_class (name, body);
+    throw std::runtime_error ("expected module, package, or class");
   }
   
   

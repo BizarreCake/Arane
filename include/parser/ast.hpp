@@ -60,6 +60,7 @@ namespace arane {
     AST_OF_TYPE,
     AST_PREFIX,
     AST_POSTFIX,
+    AST_CLASS,
   };
   
   
@@ -904,6 +905,19 @@ namespace arane {
     
   public:
     ast_postfix (ast_expr *expr, ast_postfix_type op);
+    
+    virtual ast_node* clone () override;
+  };
+  
+  
+  
+  class ast_class: public ast_module
+  {
+  public:
+    virtual ast_type get_type () const override { return AST_CLASS; }
+    
+  public:
+    ast_class (const std::string& name, ast_block *body);
     
     virtual ast_node* clone () override;
   };

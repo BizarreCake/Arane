@@ -18,7 +18,7 @@
 
 #include "runtime/gc.hpp"
 #include "runtime/vm.hpp"
-#include "runtime/bigint.hpp"
+#include <gmp.h>
 
 #include <iostream> // DEBUG
 
@@ -397,7 +397,7 @@ namespace arane {
         break;
       
       case PERL_BIGINT:
-        delete val.val.bint;
+        mpz_clear (val.val.bint);
         break;
       
       default: ;

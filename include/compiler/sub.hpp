@@ -26,37 +26,15 @@
 
 namespace arane {
   
-  // forward dec:
-  class compilation_context;
-  
-
-  struct subroutine_param
+  struct subroutine_info
   {
     std::string name;
     
-    // the type of parameter (inferred statically by the compiler).
-    // should it be known at compile time, a runtime check can be avoided.
-    type_info type;
-  };
-  
-  /* 
-   * Holds subroutine information.
-   */
-  struct subroutine_info
-  {
     // Marks whether the subroutine has been generated within the code section.
     bool marked;
     
     // A label pointing to the subroutine's position within the code section.
     int lbl;
-    
-    // The name of the subroutine.
-    std::string name;
-    
-    std::vector<subroutine_param> params;
-    
-    // The return type
-    type_info ret_ti;
   };
   
   

@@ -234,7 +234,7 @@ namespace arane {
   static bool
   _is_ident_char (char c)
   {
-    return (std::isalnum (c) || c == '_');
+    return (std::isalnum (c) || c == '_' || c == '.' || c == '!');
   }
   
   
@@ -713,7 +713,8 @@ namespace arane {
         break;
       }
     
-    if (!_is_first_ident_char (strm.peek ()))
+    if ((ident_type == TOK_IDENT_NONE && !_is_first_ident_char (strm.peek ())) ||
+        (ident_type != TOK_IDENT_NONE && !_is_ident_char (strm.peek ())))
       {
         strm.restore ();
         return false;
@@ -760,7 +761,7 @@ namespace arane {
     
     int c;
     std::string str;
-    while (std::isalpha (c = strm.peek ()))
+    while (std::isalpha (c = strm.peek ()) || c == '_')
       str.push_back (strm.get ());
     if (str.empty ())
       {
@@ -785,6 +786,9 @@ namespace arane {
       { "is", TOK_IS },
       { "eq", TOK_EQ_S },
       { "of", TOK_OF },
+      { "class", TOK_CLASS },
+      { "has", TOK_HAS },
+      { "method", TOK_METHOD },
       
       { "True", TOK_TRUE },
       { "False", TOK_FALSE },

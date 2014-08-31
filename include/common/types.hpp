@@ -77,6 +77,11 @@ namespace arane {
     
   public:
     void push_basic (basic_types typ);
+
+    /* 
+     * Boxes the type into an array.
+     */
+    void to_array ();
     
     bool is_none () const;
     

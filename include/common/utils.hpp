@@ -19,6 +19,8 @@
 #ifndef _ARANE__COMMON__UTILS__H_
 #define _ARANE__COMMON__UTILS__H_
 
+#include "common/types.hpp"
+#include "parser/ast.hpp"
 #include <string>
 
 
@@ -38,6 +40,13 @@ namespace arane {
      * into /Foo/Bar.pm
      */    
     std::string module_name_to_path (const std::string& name);
+    
+    
+    
+    /* 
+     * Returns the specified type boxed accordingly (e.g. into an array).
+     */
+    type_info get_boxed (const type_info& ti, ast_ident_type typ);
   }
 }
 

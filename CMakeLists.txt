@@ -19,10 +19,14 @@ ADD_EXECUTABLE(arane ${Arane_SOURCES} ${Arane_Headers})
 # Dependencies.
 #
 #-------------------------------------------------------------------------------
-# ...
+
+# GMP
+FIND_PACKAGE(GMP)
+INCLUDE_DIRECTORIES(${GMP_INCLUDE_DIR})
+
 #-------------------------------------------------------------------------------
 
-TARGET_LINK_LIBRARIES(arane)
+TARGET_LINK_LIBRARIES(arane ${GMP_LIBRARIES})
 
 SET(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++11")
 

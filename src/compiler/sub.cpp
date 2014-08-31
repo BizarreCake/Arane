@@ -423,8 +423,6 @@ namespace arane {
       sub.marked = true;
     }
     
-    sub.ret_ti = ast->get_return_type ();
-    
     unsigned int loc_count = ast::count_locals_needed (body);
     this->cgen->emit_push_frame (loc_count);
     
@@ -438,10 +436,6 @@ namespace arane {
           {
           case AST_IDENT:
             frm.add_arg ((static_cast<ast_ident *> (expr))->get_name ());
-            sub.params.push_back ({
-              .name = (static_cast<ast_ident *> (expr))->get_name (),
-              .type = type_info::none (),
-            });
             break;
           
           case AST_OF_TYPE:
@@ -457,10 +451,6 @@ namespace arane {
               
               ast_ident *ident = static_cast<ast_ident *> (tn->get_expr ());
               frm.add_arg (ident->get_name (), tn->get_typeinfo ());
-              sub.params.push_back ({
-                .name = ident->get_name (),
-                .type = tn->get_typeinfo (),
-              });
             }
             break;
           
@@ -470,6 +460,7 @@ namespace arane {
       }
     
     // compile the body
+    this->cgen->emit_push_microframe ();
     auto& stmts = body->get_stmts ();
     for (unsigned int i = 0; i < stmts.size (); ++i)
       {
